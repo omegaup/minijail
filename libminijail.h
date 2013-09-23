@@ -77,6 +77,18 @@ int minijail_enter_chroot(struct minijail *j, const char *dir);
  */
 void minijail_mount_tmp(struct minijail *j);
 
+/* minijail_chroot_chdir: calls chdir() after chroot() restriction for @j
+ * @j   minijail to apply restriction to
+ * @dir directory to chdir() to. Owned by caller.
+ *
+ * Sets @dir as pwd just after calling chroot. @dir should be a directory within
+ * the chroot, expressed as an absolute path. This option requires having called
+ * minijail_enter_chroot beforehand.
+ *
+ * Returns 0 on success.
+ */
+int minijail_chroot_chdir(struct minijail *j, const char *dir);
+
 /* minijail_bind: bind-mounts @src into @j as @dest, optionally writeable
  * @j         minijail to bind inside
  * @src       source to bind
@@ -158,6 +170,10 @@ int minijail_wait(struct minijail *j);
 /* Frees the given minijail. It does not matter if the process is inside the minijail or
  * not. */
 void minijail_destroy(struct minijail *j);
+
+/* Gets the absolute path of a file within the minijail */
+int minijail_get_path(const struct minijail *j, char *buffer,
+		size_t buffer_len, const char *path);
 
 #ifdef __cplusplus
 }; /* extern "C" */

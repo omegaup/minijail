@@ -96,6 +96,7 @@ struct minijail {
 		int chroot:1;
 		int mount_tmp:1;
 		int do_init:1;
+		int chdir:1;
 	} flags;
 	uid_t uid;
 	gid_t gid;
@@ -107,6 +108,7 @@ struct minijail {
 	int filter_len;
 	int binding_count;
 	char *chrootdir;
+	char *chdir;
 	struct sock_fprog *filter_prog;
 	struct binding *bindings_head;
 	struct binding *bindings_tail;
@@ -124,6 +126,8 @@ void minijail_preenter(struct minijail *j)
 	j->flags.readonly = 0;
 	j->flags.pids = 0;
 	j->flags.do_init = 0;
+	j->flags.chdir = 0;
+	j->flags.chroot = 0;
 }
 
 /*
@@ -135,6 +139,8 @@ void minijail_preexec(struct minijail *j)
 	int vfs = j->flags.vfs;
 	int enter_vfs = j->flags.enter_vfs;
 	int readonly = j->flags.readonly;
+	int chdir = j->flags.chdir;
+	int chroot = j->flags.chroot;
 	if (j->user)
 		free(j->user);
 	j->user = NULL;
@@ -144,6 +150,8 @@ void minijail_preexec(struct minijail *j)
 	j->flags.enter_vfs = enter_vfs;
 	j->flags.readonly = readonly;
 	/* Note, |pids| will already have been used before this call. */
+	j->flags.chdir = chdir;
+	j->flags.chroot = chroot;
 }
 
 /* Minijail API. */
@@ -328,6 +336,20 @@ void API minijail_mount_tmp(struct minijail *j)
 	j->flags.mount_tmp = 1;
 }
 
+int API minijail_chroot_chdir(struct minijail *j, const char *dir) {
+	if (!j->chrootdir)
+		return -EINVAL;
+	if (j->chdir)
+		return -EINVAL;
+	if (!dir || dir[0] != '/')
+		return -EINVAL;
+	j->chdir = strdup(dir);
+	if (!j->chdir)
+		return -ENOMEM;
+	j->flags.chdir = 1;
+	return 0;
+}
+
 int API minijail_bind(struct minijail *j, const char *src, const char *dest,
 		      int writeable)
 {
@@ -433,6 +455,8 @@ void minijail_marshal_helper(struct marshal_state *state,
 		marshal_append(state, j->user, strlen(j->user) + 1);
 	if (j->chrootdir)
 		marshal_append(state, j->chrootdir, strlen(j->chrootdir) + 1);
+	if (j->chdir)
+		marshal_append(state, j->chdir, strlen(j->chdir) + 1);
 	if (j->flags.seccomp_filter && j->filter_prog) {
 		struct sock_fprog *fp = j->filter_prog;
 		marshal_append(state, (char *)fp->filter,
@@ -529,6 +553,15 @@ int minijail_unmarshal(struct minijail *j, char *serialized, size_t length)
 			goto bad_chrootdir;
 	}
 
+	if (j->chdir) {	/* stale pointer */
+		char *chdirstr = consumestr(&serialized, &length);
+		if (!chdirstr)
+			goto bad_chdir;
+		j->chdir = strdup(chdirstr);
+		if (!j->chdir)
+			goto bad_chdir;
+	}
+
 	if (j->flags.seccomp_filter && j->filter_len > 0) {
 		size_t ninstrs = j->filter_len;
 		if (ninstrs > (SIZE_MAX / sizeof(struct sock_filter)) ||
@@ -574,12 +607,16 @@ bad_bindings:
 bad_filters:
 	if (j->chrootdir)
 		free(j->chrootdir);
+bad_chdir:
+	if (j->chdir)
+		free(j->chdir);
 bad_chrootdir:
 	if (j->user)
 		free(j->user);
 clear_pointers:
 	j->user = NULL;
 	j->chrootdir = NULL;
+	j->chdir = NULL;
 out:
 	return ret;
 }
@@ -623,7 +660,7 @@ int enter_chroot(const struct minijail *j)
 	if (chroot(j->chrootdir))
 		return -errno;
 
-	if (chdir("/"))
+	if (chdir(j->flags.chdir ? j->chdir : "/"))
 		return -errno;
 
 	return 0;
@@ -650,10 +687,9 @@ int unshare_vfs(void)
 	return 0;
 }
 
-int remount_readonly(void)
+int unmount_proc(void)
 {
 	const char *kProcPath = "/proc";
-	const unsigned int kSafeFlags = MS_NODEV | MS_NOEXEC | MS_NOSUID;
 	/*
 	 * Right now, we're holding a reference to our parent's old mount of
 	 * /proc in our namespace, which means using MS_REMOUNT here would
@@ -661,8 +697,17 @@ int remount_readonly(void)
 	 * namespace (!). Instead, remove their mount from our namespace
 	 * and make our own.
 	 */
+	/* Some distros have JDK mount this. Unmount it without erroring out */
+	umount("/proc/sys/fs/binfmt_misc");
 	if (umount(kProcPath))
 		return -errno;
+	return 0;
+}
+
+int remount_readonly(void)
+{
+	const char *kProcPath = "/proc";
+	const unsigned int kSafeFlags = MS_NODEV | MS_NOEXEC | MS_NOSUID;
 	if (mount("", kProcPath, "proc", kSafeFlags | MS_RDONLY, ""))
 		return -errno;
 	return 0;
@@ -835,6 +880,9 @@ void API minijail_enter(const struct minijail *j)
 	if (j->flags.net && unshare(CLONE_NEWNET))
 		pdie("unshare(net)");
 
+	if (j->flags.readonly && unmount_proc())
+		pdie("unmount_proc()");
+
 	if (j->flags.chroot && enter_chroot(j))
 		pdie("chroot");
 
@@ -842,7 +890,7 @@ void API minijail_enter(const struct minijail *j)
 		pdie("mount_tmp");
 
 	if (j->flags.readonly && remount_readonly())
-		pdie("remount");
+		pdie("remount_redonly()");
 
 	if (j->flags.caps) {
 		/*
@@ -1411,5 +1459,44 @@ void API minijail_destroy(struct minijail *j)
 		free(j->user);
 	if (j->chrootdir)
 		free(j->chrootdir);
+	if (j->chdir)
+		free(j->chdir);
 	free(j);
+}
+
+int concat_path(char *buffer, size_t buffer_len, const char *path)
+{
+	if (buffer == NULL || path == NULL)
+		return 1;
+	size_t len = strlen(buffer);
+	size_t pathlen = strlen(path);
+	if (len && buffer[len - 1] != '/' && path[0] != '/') {
+		if (len + pathlen + 1 >= buffer_len)
+			return -1;
+		snprintf(buffer + len, buffer_len - len, "/%s", path);
+	} else if (len && buffer[len - 1] == '/' && path[0] == '/') {
+		if (len + pathlen >= buffer_len)
+			return -1;
+		strncpy(buffer + len, path + 1, buffer_len - len);
+	} else {
+		if (len + pathlen >= buffer_len)
+			return -1;
+		strncpy(buffer + len, path, buffer_len - len);
+	}
+	return 0;
+}
+
+int API minijail_get_path(const struct minijail *j, char *buffer,
+		size_t buffer_len, const char *path)
+{
+	buffer[0] = '\0';
+	if (j->flags.chroot) {
+		if (0 != concat_path(buffer, buffer_len, j->chrootdir))
+			return 1;
+	}
+	if (j->flags.chdir) {
+		if (0 != concat_path(buffer, buffer_len, j->chdir))
+			return 1;
+	}
+	return concat_path(buffer, buffer_len, path);
 }
