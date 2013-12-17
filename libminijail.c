@@ -29,6 +29,7 @@
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -97,6 +98,11 @@ struct minijail {
 		int mount_tmp:1;
 		int do_init:1;
 		int chdir:1;
+		/* The following are only used for omegaUp */
+		int time_limit:1;
+		int output_limit:1;
+		int memory_limit:1;
+		int meta_file:1;
 	} flags;
 	uid_t uid;
 	gid_t gid;
@@ -112,6 +118,12 @@ struct minijail {
 	struct sock_fprog *filter_prog;
 	struct binding *bindings_head;
 	struct binding *bindings_tail;
+
+	/* The following fields are only used for omegaUp */
+	int time_limit;
+	int memory_limit;
+	int output_limit;
+	FILE *meta_file;
 };
 
 /*
@@ -139,6 +151,10 @@ void minijail_preexec(struct minijail *j)
 	int vfs = j->flags.vfs;
 	int enter_vfs = j->flags.enter_vfs;
 	int readonly = j->flags.readonly;
+	int time_limit = j->flags.time_limit;
+	int memory_limit = j->flags.memory_limit;
+	int output_limit = j->flags.output_limit;
+	int meta_file = j->flags.meta_file;
 	int chdir = j->flags.chdir;
 	int chroot = j->flags.chroot;
 	if (j->user)
@@ -150,6 +166,10 @@ void minijail_preexec(struct minijail *j)
 	j->flags.enter_vfs = enter_vfs;
 	j->flags.readonly = readonly;
 	/* Note, |pids| will already have been used before this call. */
+	j->flags.time_limit = time_limit;
+	j->flags.memory_limit = memory_limit;
+	j->flags.output_limit = output_limit;
+	j->flags.meta_file = meta_file;
 	j->flags.chdir = chdir;
 	j->flags.chroot = chroot;
 }
@@ -579,6 +599,10 @@ int minijail_unmarshal(struct minijail *j, char *serialized, size_t length)
 		memcpy(j->filter_prog->filter, program, program_len);
 	}
 
+	if (j->meta_file) {
+		j->meta_file = NULL;
+	}
+
 	count = j->binding_count;
 	j->binding_count = 0;
 	for (i = 0; i < count; ++i) {
@@ -947,20 +971,34 @@ void API minijail_enter(const struct minijail *j)
 
 /* TODO(wad) will visibility affect this variable? */
 static int init_exitstatus = 0;
+static pid_t child_pid = 0;
 
 void init_term(int __attribute__ ((unused)) sig)
 {
 	_exit(init_exitstatus);
 }
 
-int init(pid_t rootpid)
+void timeout(int __attribute__ ((unused)) sig)
+{
+	/* Something went wrong or the child ignored SIGALRM. */
+	kill(child_pid, SIGKILL);
+}
+
+int init(struct minijail *j, pid_t rootpid)
 {
 	pid_t pid;
 	int status;
+	struct rusage usage;
+	/* Backup for timeouts */
+	if (j->flags.time_limit) {
+		child_pid = rootpid;
+		signal(SIGALRM, timeout);
+		alarm((j->time_limit + 1999) / 1000);
+	}
 	/* so that we exit with the right status */
 	signal(SIGTERM, init_term);
 	/* TODO(wad) self jail with seccomp_filters here. */
-	while ((pid = wait(&status)) > 0) {
+	while ((pid = wait3(&status, 0, &usage)) > 0) {
 		/*
 		 * This loop will only end when either there are no processes
 		 * left inside our pid namespace or we get a signal.
@@ -968,8 +1006,27 @@ int init(pid_t rootpid)
 		if (pid == rootpid)
 			init_exitstatus = status;
 	}
-	if (!WIFEXITED(init_exitstatus))
+	if (j->flags.meta_file) {
+		fprintf(j->meta_file,
+				"user:%ld\nrss:%ld\n",
+				1000000 * usage.ru_utime.tv_sec + usage.ru_utime.tv_usec,
+				usage.ru_maxrss);
+	}
+	if (!WIFEXITED(init_exitstatus)) {
+		if (j->flags.meta_file) {
+			if (WIFSIGNALED(init_exitstatus)) {
+				fprintf(j->meta_file, "signal:%d\n", WTERMSIG(init_exitstatus));
+			} else {
+				fprintf(j->meta_file, "signal:%d\n", -1);
+			}
+			fclose(j->meta_file);
+		}
 		_exit(MINIJAIL_ERR_INIT);
+	}
+	if (j->flags.meta_file) {
+		fprintf(j->meta_file, "status:%d\n", WEXITSTATUS(init_exitstatus));
+		fclose(j->meta_file);
+	}
 	_exit(WEXITSTATUS(init_exitstatus));
 }
 
@@ -1073,6 +1130,41 @@ int setup_and_dupe_pipe_end(int fds[2], size_t index, int fd)
 	close(fds[1 - index]);
 	/* dup2(2) the corresponding end of the pipe into |fd|. */
 	return dup2(fds[index], fd);
+}
+
+int setup_limits(struct minijail *j) {
+	struct rlimit limit;
+
+	if (j->flags.memory_limit) {
+		limit.rlim_cur = limit.rlim_max = j->memory_limit;
+		if (setrlimit(RLIMIT_AS, &limit)) {
+			return -1;
+		}
+	}
+
+	if (j->flags.output_limit) {
+		limit.rlim_cur = limit.rlim_max = j->output_limit;
+		if (setrlimit(RLIMIT_FSIZE, &limit)) {
+			return -1;
+		}
+
+		/* Diable core dumping if there is an output limit. */
+		limit.rlim_cur = limit.rlim_max = 0;
+		if (setrlimit(RLIMIT_CORE, &limit)) {
+			return -1;
+		}
+	}
+
+	if (j->flags.time_limit) {
+		limit.rlim_cur = limit.rlim_max = (999 + j->time_limit) / 1000;
+		if (setrlimit(RLIMIT_CPU, &limit)) {
+			return -1;
+		}
+
+		ualarm(j->time_limit * 1000, 0);
+	}
+
+	return 0;
 }
 
 int API minijail_run(struct minijail *j, const char *filename,
@@ -1328,7 +1420,7 @@ int API minijail_run_pid_pipes(struct minijail *j, const char *filename,
 		if (child_pid < 0)
 			_exit(child_pid);
 		else if (child_pid > 0)
-			init(child_pid);	/* never returns */
+			init(j, child_pid);	/* never returns */
 	}
 
 	/*
@@ -1389,7 +1481,15 @@ int API minijail_run_static(struct minijail *j, const char *filename,
 		if (child_pid < 0)
 			_exit(child_pid);
 		else if (child_pid > 0)
-			init(child_pid);	/* never returns */
+			init(j, child_pid);	/* never returns */
+	}
+
+	if (setup_limits(j)) {
+		die("failed to set execution limits");
+	}
+
+	if (j->flags.meta_file) {
+		fclose(j->meta_file);
 	}
 
 	_exit(execve(filename, argv, environ));
@@ -1499,4 +1599,33 @@ int API minijail_get_path(const struct minijail *j, char *buffer,
 			return 1;
 	}
 	return concat_path(buffer, buffer_len, path);
+}
+
+/* The following are only used for omegaUp */
+void API minijail_time_limit(struct minijail *j, int msec_limit)
+{
+	j->flags.time_limit = 1;
+	j->time_limit = msec_limit;
+}
+
+void API minijail_output_limit(struct minijail *j, int byte_limit)
+{
+	j->flags.output_limit = 1;
+	j->output_limit = byte_limit;
+}
+
+void API minijail_memory_limit(struct minijail *j, int byte_limit)
+{
+	j->flags.memory_limit = 1;
+	j->memory_limit = byte_limit;
+}
+
+int API minijail_meta_file(struct minijail *j, const char *meta_path)
+{
+	j->flags.meta_file = 1;
+	j->meta_file = fopen(meta_path, "w");
+	if (j->meta_file == NULL) {
+		return -1;
+	}
+	return 0;
 }

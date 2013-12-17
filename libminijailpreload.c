@@ -61,6 +61,8 @@ static int fake_main(int argc, char **argv, char **envp)
 	fd = atoi(fd_name);
 	if (fd < 0)
 		return MINIJAIL_ERR_PRELOAD;
+	// Even if the process cannot use that fd, avoid divulging stuff.
+	unsetenv(kFdEnvVar);
 
 	j = minijail_new();
 	if (!j)

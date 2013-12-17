@@ -5,10 +5,13 @@
 
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/limits.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "libminijail.h"
@@ -16,48 +19,6 @@
 
 #include "elfparse.h"
 #include "util.h"
-
-static void set_user(struct minijail *j, const char *arg)
-{
-	char *end = NULL;
-	int uid = strtod(arg, &end);
-	if (!*end && *arg) {
-		minijail_change_uid(j, uid);
-		return;
-	}
-
-	if (minijail_change_user(j, arg)) {
-		fprintf(stderr, "Bad user: '%s'\n", arg);
-		exit(1);
-	}
-}
-
-static void set_group(struct minijail *j, const char *arg)
-{
-	char *end = NULL;
-	int gid = strtod(arg, &end);
-	if (!*end && *arg) {
-		minijail_change_gid(j, gid);
-		return;
-	}
-
-	if (minijail_change_group(j, arg)) {
-		fprintf(stderr, "Bad group: '%s'\n", arg);
-		exit(1);
-	}
-}
-
-static void use_caps(struct minijail *j, const char *arg)
-{
-	uint64_t caps;
-	char *end = NULL;
-	caps = strtoull(arg, &end, 16);
-	if (*end) {
-		fprintf(stderr, "Invalid cap set: '%s'\n", arg);
-		exit(1);
-	}
-	minijail_use_caps(j, caps);
-}
 
 static void add_binding(struct minijail *j, char *arg)
 {
@@ -83,17 +44,10 @@ static void usage(const char *progn)
 	       "<program> [args...]\n"
 	       "  -b:         binds <src> to <dest> in chroot. Multiple "
 	       "instances allowed\n"
-	       "  -c <caps>:  restrict caps to <caps>\n"
 	       "  -C <dir>:   chroot to <dir>\n"
 	       "  -d <dir>:   chdir to <dir> (requires -C)\n"
-	       "  -e:         enter new network namespace\n"
-	       "  -G:         inherit secondary groups from uid\n"
-	       "  -g <group>: change gid to <group>\n"
 	       "  -h:         help (this message)\n"
 	       "  -H:         seccomp filter help message\n"
-	       "  -i:         exit immediately after fork (do not act as init)\n"
-	       "              Not compatible with -p\n"
-	       "  -I:         run <program> as init (pid 1) inside a new pid namespace (implies -p)\n"
 	       "  -L:         report blocked syscalls to syslog when using seccomp filter.\n"
 	       "              Forces the following syscalls to be allowed:\n"
 	       "                  ", progn);
@@ -101,17 +55,8 @@ static void usage(const char *progn)
 		printf("%s ", log_syscalls[i]);
 
 	printf("\n"
-	       "  -n:         set no_new_privs\n"
-	       "  -p:         enter new pid namespace (implies -vr)\n"
-	       "  -r:         remount /proc read-only (implies -v)\n"
-	       "  -s:         use seccomp\n"
 	       "  -S <file>:  set seccomp filter using <file>\n"
-	       "              E.g., -S /usr/share/filters/<prog>.$(uname -m)\n"
-	       "              Requires -n when not running as root\n"
-	       "  -t:         mount tmpfs at /tmp inside chroot\n"
-	       "  -u <user>:  change uid to <user>\n"
-	       "  -v:         enter new mount namespace\n"
-	       "  -V <file>:  enter specified mount namespace\n");
+	       "              E.g., -S /usr/share/filters/<prog>.$(uname -m)\n");
 }
 
 static void seccomp_filter_usage(const char *progn)
@@ -133,17 +78,8 @@ static int parse_args(struct minijail *j, int argc, char *argv[],
 	const char *filter_path;
 	if (argc > 1 && argv[1][0] != '-')
 		return 1;
-	while ((opt = getopt(argc, argv, "u:g:sS:c:C:b:d:V:vrGhHinpLetI")) != -1) {
+	while ((opt = getopt(argc, argv, "S:C:d:b:hHLt:I:O:m:M:0:1:2:")) != -1) {
 		switch (opt) {
-		case 'u':
-			set_user(j, optarg);
-			break;
-		case 'g':
-			set_group(j, optarg);
-			break;
-		case 'n':
-			minijail_no_new_privs(j);
-			break;
 		case 's':
 			minijail_use_seccomp(j);
 			break;
@@ -168,49 +104,55 @@ static int parse_args(struct minijail *j, int argc, char *argv[],
 		case 'b':
 			add_binding(j, optarg);
 			break;
-		case 'c':
-			use_caps(j, optarg);
-			break;
 		case 'C':
 			if (0 != minijail_enter_chroot(j, optarg)) {
 				fprintf(stderr, "Could not set chroot.\n");
 				exit(1);
 			}
 			break;
-		case 't':
-			minijail_mount_tmp(j);
-			break;
 		case 'd':
 			if (0 != minijail_chroot_chdir(j, optarg))
 				exit(1);
 			break;
-		case 'v':
-			minijail_namespace_vfs(j);
-			break;
-		case 'V':
-			minijail_namespace_enter_vfs(j, optarg);
-			break;
-		case 'r':
-			minijail_remount_readonly(j);
-			break;
-		case 'G':
-			minijail_inherit_usergroups(j);
-			break;
-		case 'p':
-			minijail_namespace_pids(j);
-			break;
-		case 'e':
-			minijail_namespace_net(j);
-			break;
-		case 'i':
-			*exit_immediately = 1;
-			break;
 		case 'H':
 			seccomp_filter_usage(argv[0]);
 			exit(1);
-		case 'I':
-			minijail_namespace_pids(j);
-			minijail_run_as_init(j);
+		case 't':
+			minijail_time_limit(j, atoi(optarg));
+			break;
+		case 'O':
+			minijail_output_limit(j, atoi(optarg));
+			break;
+		case 'm':
+			minijail_memory_limit(j, atoi(optarg));
+			break;
+		case 'M':
+			if (minijail_meta_file(j, optarg)) {
+				fprintf(stderr,
+					"Could not open %s for writing\n", optarg);
+				exit(1);
+			}
+			break;
+		case '0':
+			close(0);
+			if (open(optarg, O_RDONLY) != 0) {
+				perror("open");
+				exit(1);
+			}
+			break;
+		case '1':
+			close(1);
+			if (open(optarg, O_WRONLY | O_CREAT | O_TRUNC, 0644) != 1) {
+				perror("open");
+				exit(1);
+			}
+			break;
+		case '2':
+			close(2);
+			if (open(optarg, O_WRONLY | O_CREAT | O_TRUNC, 0644) != 2) {
+				perror("open");
+				exit(1);
+			}
 			break;
 		default:
 			usage(argv[0]);
@@ -239,7 +181,39 @@ static int parse_args(struct minijail *j, int argc, char *argv[],
 
 int main(int argc, char *argv[])
 {
+	char* caller = getenv("SUDO_USER");
+	if (caller == NULL) {
+		die("Not calling from sudo");
+	}
+	struct passwd* passwd = getpwnam(caller);
+	if (passwd == NULL) {
+		die("User %s not found", caller);
+	}
+
+	// Set a minimalistic environment
+	clearenv();
+	setenv("HOME", "/home", 1);
+
 	struct minijail *j = minijail_new();
+	// Change credentials to the original user so this never runs as root.
+	minijail_change_uid(j, passwd->pw_uid);
+	minijail_change_gid(j, passwd->pw_gid);
+	minijail_use_caps(j, 0);
+	minijail_namespace_pids(j);
+	minijail_remount_readonly(j);
+	minijail_namespace_vfs(j);
+	minijail_no_new_privs(j);
+	minijail_namespace_net(j);
+	minijail_mount_tmp(j);
+
+	// Temporarily drop privileges to redirect files.
+	if (setegid(passwd->pw_gid)) {
+		die("setegid user");
+	}
+	if (seteuid(passwd->pw_uid)) {
+		die("seteuid user");
+	}
+
 	char *dl_mesg = NULL;
 	int exit_immediately = 0;
 	int consumed = parse_args(j, argc, argv, &exit_immediately);
@@ -264,6 +238,13 @@ int main(int argc, char *argv[])
 	elftype = get_elf_linkage(filepath);
 	if (elftype == ELFSTATIC) {
 		/* Target binary is static. */
+		// Become root again to set the jail up.
+		if (seteuid(0)) {
+			die("seteuid root");
+		}
+		if (setegid(0)) {
+			die("setegid root");
+		}
 		minijail_run_static(j, argv[0], argv);
 	} else if (elftype == ELFDYNAMIC) {
 		/*
@@ -282,6 +263,13 @@ int main(int argc, char *argv[])
 			    dl_mesg = dlerror();
 			    fprintf(stderr, "dlopen(): %s\n", dl_mesg);
 			    return 1;
+		}
+		// Become root again to set the jail up.
+		if (seteuid(0)) {
+			die("seteuid root");
+		}
+		if (setegid(0)) {
+			die("setegid root");
 		}
 		minijail_run(j, argv[0], argv);
 	} else {

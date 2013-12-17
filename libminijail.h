@@ -175,6 +175,13 @@ void minijail_destroy(struct minijail *j);
 int minijail_get_path(const struct minijail *j, char *buffer,
 		size_t buffer_len, const char *path);
 
+/* These functions are only used for omegaUp
+ */
+void minijail_time_limit(struct minijail *j, int msec_limit);
+void minijail_output_limit(struct minijail *j, int byte_limit);
+void minijail_memory_limit(struct minijail *j, int byte_limit);
+int minijail_meta_file(struct minijail *j, const char* meta_path);
+
 #ifdef __cplusplus
 }; /* extern "C" */
 #endif
