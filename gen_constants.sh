@@ -32,6 +32,7 @@ INCLUDES='
 #include <linux/sched.h>
 #include <stddef.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>'
 

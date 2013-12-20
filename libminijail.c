@@ -981,7 +981,7 @@ void init_term(int __attribute__ ((unused)) sig)
 void timeout(int __attribute__ ((unused)) sig)
 {
 	/* Something went wrong or the child ignored SIGALRM. */
-	kill(child_pid, SIGKILL);
+	kill(-child_pid, SIGKILL);
 }
 
 int init(struct minijail *j, pid_t rootpid)
@@ -1421,6 +1421,11 @@ int API minijail_run_pid_pipes(struct minijail *j, const char *filename,
 			_exit(child_pid);
 		else if (child_pid > 0)
 			init(j, child_pid);	/* never returns */
+	}
+
+	/* Move the child into its own process group to kill it easily */
+	if (setsid() == -1) {
+		die("setsid");
 	}
 
 	/*
