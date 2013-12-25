@@ -1177,7 +1177,8 @@ int setup_limits(struct minijail *j) {
 	}
 
 	if (j->flags.time_limit) {
-		limit.rlim_cur = limit.rlim_max = (999 + j->time_limit) / 1000;
+		limit.rlim_cur = (999 + j->time_limit) / 1000;
+		limit.rlim_max = limit.rlim_cur + 1;
 		if (setrlimit(RLIMIT_CPU, &limit)) {
 			return -1;
 		}
