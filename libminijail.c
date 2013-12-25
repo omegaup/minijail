@@ -32,6 +32,7 @@
 #include <sys/resource.h>
 #include <sys/user.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "libminijail.h"
@@ -972,6 +973,7 @@ void API minijail_enter(const struct minijail *j)
 /* TODO(wad) will visibility affect this variable? */
 static int init_exitstatus = 0;
 static pid_t child_pid = 0;
+static int signal_override = 0;
 
 void init_term(int __attribute__ ((unused)) sig)
 {
@@ -981,6 +983,7 @@ void init_term(int __attribute__ ((unused)) sig)
 void timeout(int __attribute__ ((unused)) sig)
 {
 	/* Something went wrong or the child ignored SIGALRM. */
+	signal_override = SIGXCPU;
 	kill(-child_pid, SIGKILL);
 }
 
@@ -989,6 +992,11 @@ int init(struct minijail *j, pid_t rootpid)
 	pid_t pid;
 	int status;
 	struct rusage usage;
+	struct timespec t0, t1;
+	/* Measure wall-time when outputting metadata information */
+	if (j->flags.meta_file) {
+		clock_gettime(CLOCK_REALTIME, &t0);
+	}
 	/* Backup for timeouts */
 	if (j->flags.time_limit) {
 		child_pid = rootpid;
@@ -1007,12 +1015,25 @@ int init(struct minijail *j, pid_t rootpid)
 			init_exitstatus = status;
 	}
 	if (j->flags.meta_file) {
+		clock_gettime(CLOCK_REALTIME, &t1);
+		t1.tv_sec -= t0.tv_sec;
+		if (t1.tv_nsec < t0.tv_nsec) {
+			t1.tv_sec--;
+			t1.tv_nsec = 1000000000L + t1.tv_nsec - t0.tv_nsec;
+		} else {
+			t1.tv_nsec -= t0.tv_nsec;
+		}
 		fprintf(j->meta_file,
-				"user:%ld\nrss:%ld\n",
+				"time:%ld\ntime-wall:%ld\nmem:%ld\n",
 				1000000 * usage.ru_utime.tv_sec + usage.ru_utime.tv_usec,
+				(1000000000L * t1.tv_sec + t1.tv_nsec) / 1000L,
 				usage.ru_maxrss);
 	}
-	if (!WIFEXITED(init_exitstatus)) {
+	if (signal_override) {
+		fprintf(j->meta_file, "signal:%d\n", signal_override);
+		fclose(j->meta_file);
+		_exit(MINIJAIL_ERR_INIT);
+	} else if (!WIFEXITED(init_exitstatus)) {
 		if (j->flags.meta_file) {
 			if (WIFSIGNALED(init_exitstatus)) {
 				fprintf(j->meta_file, "signal:%d\n", WTERMSIG(init_exitstatus));
