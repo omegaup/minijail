@@ -1027,7 +1027,7 @@ int init(struct minijail *j, pid_t rootpid)
 				"time:%ld\ntime-wall:%ld\nmem:%ld\n",
 				1000000 * usage.ru_utime.tv_sec + usage.ru_utime.tv_usec,
 				(1000000000L * t1.tv_sec + t1.tv_nsec) / 1000L,
-				usage.ru_maxrss);
+				usage.ru_maxrss * 1024);
 	}
 	if (signal_override) {
 		fprintf(j->meta_file, "signal:%d\n", signal_override);
