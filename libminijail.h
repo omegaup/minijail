@@ -177,6 +177,7 @@ int minijail_get_path(const struct minijail *j, char *buffer,
 
 /* These functions are only used for omegaUp
  */
+void minijail_stack_limit(struct minijail *j, int stack_limit);
 void minijail_time_limit(struct minijail *j, int msec_limit);
 void minijail_output_limit(struct minijail *j, int byte_limit);
 void minijail_memory_limit(struct minijail *j, int byte_limit);

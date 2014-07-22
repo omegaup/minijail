@@ -100,6 +100,7 @@ struct minijail {
 		int do_init:1;
 		int chdir:1;
 		/* The following are only used for omegaUp */
+		int stack_limit:1;
 		int time_limit:1;
 		int output_limit:1;
 		int memory_limit:1;
@@ -121,6 +122,7 @@ struct minijail {
 	struct binding *bindings_tail;
 
 	/* The following fields are only used for omegaUp */
+	int stack_limit;
 	int time_limit;
 	int memory_limit;
 	int output_limit;
@@ -152,6 +154,7 @@ void minijail_preexec(struct minijail *j)
 	int vfs = j->flags.vfs;
 	int enter_vfs = j->flags.enter_vfs;
 	int readonly = j->flags.readonly;
+	int stack_limit = j->flags.stack_limit;
 	int time_limit = j->flags.time_limit;
 	int memory_limit = j->flags.memory_limit;
 	int output_limit = j->flags.output_limit;
@@ -167,6 +170,7 @@ void minijail_preexec(struct minijail *j)
 	j->flags.enter_vfs = enter_vfs;
 	j->flags.readonly = readonly;
 	/* Note, |pids| will already have been used before this call. */
+	j->flags.stack_limit = stack_limit;
 	j->flags.time_limit = time_limit;
 	j->flags.memory_limit = memory_limit;
 	j->flags.output_limit = output_limit;
@@ -1176,6 +1180,13 @@ int setup_limits(struct minijail *j) {
 		}
 	}
 
+	if (j->flags.stack_limit) {
+		limit.rlim_cur = limit.rlim_max = j->stack_limit;
+		if (setrlimit(RLIMIT_STACK, &limit)) {
+			return -1;
+		}
+	}
+
 	if (j->flags.time_limit) {
 		limit.rlim_cur = (999 + j->time_limit) / 1000;
 		limit.rlim_max = limit.rlim_cur + 1;
@@ -1629,6 +1640,12 @@ int API minijail_get_path(const struct minijail *j, char *buffer,
 }
 
 /* The following are only used for omegaUp */
+void API minijail_stack_limit(struct minijail *j, int stack_limit)
+{
+	j->flags.stack_limit = 1;
+	j->stack_limit = stack_limit;
+}
+
 void API minijail_time_limit(struct minijail *j, int msec_limit)
 {
 	j->flags.time_limit = 1;
