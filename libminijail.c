@@ -30,6 +30,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -1627,16 +1629,91 @@ int concat_path(char *buffer, size_t buffer_len, const char *path)
 int API minijail_get_path(const struct minijail *j, char *buffer,
 		size_t buffer_len, const char *path)
 {
+	struct stat st;
 	buffer[0] = '\0';
-	if (j->flags.chroot) {
-		if (0 != concat_path(buffer, buffer_len, j->chrootdir))
-			return 1;
+
+ 	// Get the absolute path of the file, including the chdir if this is a
+ 	// relative path.
+ 	if (path[0] != '/') {
+ 		if (j->flags.chdir) {
+ 			if (0 != concat_path(buffer, buffer_len, j->chdir))
+ 				return 1;
+ 		} else if (j->flags.chroot) {
+ 			if (0 != concat_path(buffer, buffer_len, "/"))
+ 				return 1;
+ 		} else {
+ 			if (getcwd(buffer, buffer_len) == NULL)
+ 				return 1;
+ 		}
+ 	}
+ 	size_t len = strlen(buffer);
+ 	if (0 != concat_path(buffer, buffer_len - len, path))
+ 		return 1;
+ 	len = strlen(buffer);
+ 
+ 	// Get the binding with the longest match.
+ 	struct binding *cur = j->bindings_head, *best = NULL;
+ 	size_t best_len = 0, mount_len = 0;
+ 	while (j->bindings_tail) {
+ 		mount_len = strlen(cur->dest);
+ 		if (strncmp(cur->dest, buffer, mount_len) == 0 && mount_len > best_len) {
+ 			best_len = mount_len;
+ 			best = cur;
+ 		}
+ 		if (cur == j->bindings_tail)
+ 			break;
+ 		cur = cur->next;
+ 	}
+ 
+ 	const char* src_path = NULL;
+ 	if (best != NULL) {
+ 		src_path = best->src;
+ 	} else if (j->flags.chroot) {
+ 		src_path = j->chrootdir;
+ 		best_len = 1;
+ 	} else {
+ 		src_path = "/";
+ 		best_len = 1;
+ 	}
+ 	size_t src_len = strlen(src_path);
+ 	// Trim the trailing /, if any
+ 	if (src_path[src_len - 1] == '/') {
+ 		src_len--;
+ 	}
+ 	if (len - best_len + src_len + 2 >= buffer_len) {
+ 		fprintf(stderr, "Not enough space\n");
+ 		return 1;
+ 	}
+
+	memmove(buffer + src_len + 1, buffer + best_len, len - best_len);
+	strncpy(buffer, src_path, src_len);
+	buffer[src_len] = '/';
+
+	if (lstat(buffer, &st) == -1) {
+		return 1;
 	}
-	if (j->flags.chdir) {
-		if (0 != concat_path(buffer, buffer_len, j->chdir))
-			return 1;
+
+	// Regular file. All is good.
+	if (S_ISREG(st.st_mode)) {
+		return 0;
 	}
-	return concat_path(buffer, buffer_len, path);
+
+	// Not a symbolic link. Disallowing.
+	if (!S_ISLNK(st.st_mode)) {
+		return 1;
+	}
+
+	char linkpath[PATH_MAX+1];
+	ssize_t linklen;
+	linklen = readlink(buffer, linkpath, sizeof(linkpath) - 1);
+	if (linklen == -1) {
+		fprintf(stderr, "Invalid symlink\n");
+		return 1;
+	}
+	linkpath[linklen] = '\0';
+
+	// Recursively try to figure out the real path.
+	return minijail_get_path(j, buffer, buffer_len, linkpath);
 }
 
 /* The following are only used for omegaUp */
