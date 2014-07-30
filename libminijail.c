@@ -1463,6 +1463,10 @@ int API minijail_run_pid_pipes(struct minijail *j, const char *filename,
 		die("setsid");
 	}
 
+	if (setup_limits(j)) {
+		die("failed to set execution limits");
+	}
+
 	/*
 	 * If we aren't pid-namespaced, or jailed program asked to be init:
 	 *   calling process
