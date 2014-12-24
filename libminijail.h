@@ -179,6 +179,7 @@ int minijail_get_path(const struct minijail *j, char *buffer,
  */
 void minijail_stack_limit(struct minijail *j, int stack_limit);
 void minijail_time_limit(struct minijail *j, int msec_limit);
+void minijail_extra_wall_time(struct minijail *j, int extra_msec);
 void minijail_output_limit(struct minijail *j, int byte_limit);
 void minijail_memory_limit(struct minijail *j, int byte_limit);
 int minijail_meta_file(struct minijail *j, const char* meta_path);

@@ -126,6 +126,7 @@ struct minijail {
 	/* The following fields are only used for omegaUp */
 	int stack_limit;
 	int time_limit;
+	int extra_wall_time;
 	int memory_limit;
 	int output_limit;
 	FILE *meta_file;
@@ -1007,7 +1008,7 @@ int init(struct minijail *j, pid_t rootpid)
 	if (j->flags.time_limit) {
 		child_pid = rootpid;
 		signal(SIGALRM, timeout);
-		alarm((j->time_limit + 1999) / 1000);
+		alarm((j->time_limit + j->extra_wall_time + 1999) / 1000);
 	}
 	/* so that we exit with the right status */
 	signal(SIGTERM, init_term);
@@ -1196,7 +1197,7 @@ int setup_limits(struct minijail *j) {
 			return -1;
 		}
 
-		ualarm(j->time_limit * 1000, 0);
+		ualarm((j->time_limit + j->extra_wall_time) * 1000, 0);
 	}
 
 	return 0;
@@ -1731,6 +1732,11 @@ void API minijail_time_limit(struct minijail *j, int msec_limit)
 {
 	j->flags.time_limit = 1;
 	j->time_limit = msec_limit;
+}
+
+void API minijail_extra_wall_time(struct minijail *j, int extra_msec)
+{
+	j->extra_wall_time = extra_msec;
 }
 
 void API minijail_output_limit(struct minijail *j, int byte_limit)
