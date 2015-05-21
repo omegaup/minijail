@@ -129,6 +129,7 @@ struct minijail {
 	int extra_wall_time;
 	int memory_limit;
 	int output_limit;
+	int syscall_pipe_fds[2];
 	FILE *meta_file;
 };
 
@@ -629,6 +630,10 @@ int minijail_unmarshal(struct minijail *j, char *serialized, size_t length)
 			goto bad_bindings;
 	}
 
+	close(j->syscall_pipe_fds[0]); /* read endpoint */
+	j->syscall_pipe_fds[0] = -1;
+	signum_fd = j->syscall_pipe_fds[1];
+
 	return 0;
 
 bad_bindings:
@@ -865,7 +870,6 @@ void set_seccomp_filter(const struct minijail *j)
 	if (j->flags.seccomp_filter && j->flags.log_seccomp_filter) {
 		if (install_sigsys_handler())
 			pdie("install SIGSYS handler");
-		warn("logging seccomp filter failures");
 	}
 
 	/*
@@ -997,7 +1001,10 @@ void timeout(int __attribute__ ((unused)) sig)
 int init(struct minijail *j, pid_t rootpid)
 {
 	pid_t pid;
+	int exit_signal = 0;
+	int exit_syscall = -1;
 	int status;
+	const char *exit_syscall_name;
 	struct rusage usage;
 	struct timespec t0, t1;
 	/* Measure wall-time when outputting metadata information */
@@ -1042,17 +1049,35 @@ int init(struct minijail *j, pid_t rootpid)
 		_exit(MINIJAIL_ERR_INIT);
 	} else if (!WIFEXITED(init_exitstatus)) {
 		if (j->flags.meta_file) {
-			if (WIFSIGNALED(init_exitstatus)) {
-				fprintf(j->meta_file, "signal:%d\n", WTERMSIG(init_exitstatus));
+			int exit_signal = -1;
+			if (WIFSIGNALED(init_exitstatus))
+				exit_signal = WTERMSIG(init_exitstatus);
+			exit_signal_name = lookup_signal_name(exit_signal);
+			if (exit_signal_name) {
+				fprintf(j->meta_file, "signal:%s\n", exit_signal_name);
 			} else {
-				fprintf(j->meta_file, "signal:%d\n", -1);
+				fprintf(j->meta_file, "signal_number:%d\n", exit_signal);
 			}
 			fclose(j->meta_file);
 		}
 		_exit(MINIJAIL_ERR_INIT);
 	}
 	if (j->flags.meta_file) {
-		fprintf(j->meta_file, "status:%d\n", WEXITSTATUS(init_exitstatus));
+		if (read(j->syscall_pipe_fds[0], &exit_syscall, sizeof(exit_syscall)) ==
+				sizeof(exit_syscall)) {
+			exit_signal = SIGSYS;
+			exit_syscall_name = lookup_syscall_name(exit_syscall);
+			if (exit_syscall_name) {
+				fprintf(j->meta_file, "syscall:%s\n", exit_syscall_name);
+			} else {
+				fprintf(j->meta_file, "syscall_number:%d\n", exit_syscall);
+			}
+		}
+		if (exit_signal != 0) {
+			fprintf(j->meta_file, "signal:%d\n", exit_signal);
+		} else {
+			fprintf(j->meta_file, "status:%d\n", WEXITSTATUS(init_exitstatus));
+		}
 		fclose(j->meta_file);
 	}
 	_exit(WEXITSTATUS(init_exitstatus));
@@ -1278,6 +1303,13 @@ int API minijail_run_pid_pipes(struct minijail *j, const char *filename,
 		return -EFAULT;
 
 	/*
+	 * Setup another pipe pair to receive the syscall number that caused the
+	 * process to be killed, if any
+	 */
+	if (pipe(j->syscall_pipe_fds))
+		return -EFAULT;
+
+	/*
 	 * If we want to write to the child process' standard input,
 	 * create the pipe(2) now.
 	 */
@@ -1370,6 +1402,10 @@ int API minijail_run_pid_pipes(struct minijail *j, const char *filename,
 		close(pipe_fds[0]);	/* read endpoint */
 		ret = minijail_to_fd(j, pipe_fds[1]);
 		close(pipe_fds[1]);	/* write endpoint */
+		close(j->syscall_pipe_fds[0]); /* read endpoint */
+		j->syscall_pipe_fds[0] = -1;
+		close(j->syscall_pipe_fds[1]); /* write endpoint */
+		j->syscall_pipe_fds[1] = -1;
 		if (ret) {
 			kill(j->initpid, SIGKILL);
 			die("failed to send marshalled minijail");
@@ -1455,8 +1491,11 @@ int API minijail_run_pid_pipes(struct minijail *j, const char *filename,
 		child_pid = fork();
 		if (child_pid < 0)
 			_exit(child_pid);
-		else if (child_pid > 0)
+		else if (child_pid > 0) {
+			close(j->syscall_pipe_fds[1]); /* write endpoint */
+			j->syscall_pipe_fds[1] = -1;
 			init(j, child_pid);	/* never returns */
+		}
 	}
 
 	/* Move the child into its own process group to kill it easily */

@@ -9,6 +9,7 @@
 #ifndef SIGNAL_H
 #define SIGNAL_H
 
+extern int signum_fd;
 int install_sigsys_handler();
 
 #endif /* SIGNAL_H */

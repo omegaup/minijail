@@ -214,6 +214,7 @@ int main(int argc, char *argv[])
 	minijail_no_new_privs(j);
 	minijail_namespace_net(j);
 	minijail_mount_tmp(j);
+	minijail_log_seccomp_filter_failures(j);
 
 	// Temporarily drop privileges to redirect files.
 	if (setegid(passwd->pw_gid)) {

@@ -25,6 +25,9 @@
  * sendto(...)                                     <- important
  * exit_group(0)                                   <- finish!
  */
+const char* log_syscalls[] = { "write" };
+#if 0
+// omegaUp uses a pipe to log syscalls, so only write is needed.
 #if defined(__x86_64__)
 const char *log_syscalls[] = { "connect", "sendto" };
 #elif defined(__i386__)
@@ -36,6 +39,7 @@ const char *log_syscalls[] = { "connect", "gettimeofday", "send" };
 const char *log_syscalls[] = { "connect", "send" };
 #else
 #error "Unsupported platform"
+#endif
 #endif
 
 const size_t log_syscalls_len = sizeof(log_syscalls)/sizeof(log_syscalls[0]);
