@@ -4,6 +4,8 @@
  */
 
 #include <ctype.h>
+#include <signal.h>
+#include <string.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -42,9 +44,55 @@ const char *log_syscalls[] = { "connect", "send" };
 #endif
 #endif
 
+struct signal_entry signal_table[] = {
+#define ENTRY(x) { #x, x }
+	ENTRY(SIGHUP),
+	ENTRY(SIGINT),
+	ENTRY(SIGQUIT),
+	ENTRY(SIGILL),
+	ENTRY(SIGTRAP),
+	ENTRY(SIGABRT),
+	ENTRY(SIGBUS),
+	ENTRY(SIGFPE),
+	ENTRY(SIGKILL),
+	ENTRY(SIGUSR1),
+	ENTRY(SIGSEGV),
+	ENTRY(SIGUSR2),
+	ENTRY(SIGPIPE),
+	ENTRY(SIGALRM),
+	ENTRY(SIGTERM),
+	ENTRY(SIGSTKFLT),
+	ENTRY(SIGCHLD),
+	ENTRY(SIGCONT),
+	ENTRY(SIGSTOP),
+	ENTRY(SIGTSTP),
+	ENTRY(SIGTTIN),
+	ENTRY(SIGTTOU),
+	ENTRY(SIGURG),
+	ENTRY(SIGXCPU),
+	ENTRY(SIGXFSZ),
+	ENTRY(SIGVTALRM),
+	ENTRY(SIGPROF),
+	ENTRY(SIGWINCH),
+	ENTRY(SIGIO),
+	ENTRY(SIGPWR),
+	ENTRY(SIGSYS),
+#undef ENTRY
+	{ NULL, 0 }
+};
+
 const size_t log_syscalls_len = sizeof(log_syscalls)/sizeof(log_syscalls[0]);
 
 long int parse_single_constant(char *constant_str, char **endptr);
+
+const char *lookup_signal_name(int signum)
+{
+	const struct signal_entry *entry = signal_table;
+	for (; entry->name && entry->signum >= 0; ++entry)
+		if (entry->signum == signum)
+			return entry->name;
+	return NULL;
+}
 
 int lookup_syscall(const char *name)
 {

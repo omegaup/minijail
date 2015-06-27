@@ -1005,6 +1005,7 @@ int init(struct minijail *j, pid_t rootpid)
 	int exit_syscall = -1;
 	int status;
 	const char *exit_syscall_name;
+	const char *exit_signal_name;
 	struct rusage usage;
 	struct timespec t0, t1;
 	/* Measure wall-time when outputting metadata information */
@@ -1074,7 +1075,12 @@ int init(struct minijail *j, pid_t rootpid)
 			}
 		}
 		if (exit_signal != 0) {
-			fprintf(j->meta_file, "signal:%d\n", exit_signal);
+			exit_signal_name = lookup_signal_name(exit_signal);
+			if (exit_signal_name) {
+				fprintf(j->meta_file, "signal:%s\n", exit_signal_name);
+			} else {
+				fprintf(j->meta_file, "signal_number:%d\n", exit_signal);
+			}
 		} else {
 			fprintf(j->meta_file, "status:%d\n", WEXITSTATUS(init_exitstatus));
 		}

@@ -10,6 +10,11 @@ struct constant_entry {
   unsigned long value;
 };
 
+struct signal_entry {
+	const char *name;
+	int signum;
+};
+
 extern const struct constant_entry constant_table[];
 
 #endif  /* MINIJAIL_LIBCONSTANTS_H_ */

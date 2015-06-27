@@ -29,6 +29,7 @@
 extern const char *log_syscalls[];
 extern const size_t log_syscalls_len;
 
+const char *lookup_signal_name(int signum);
 int lookup_syscall(const char *name);
 const char *lookup_syscall_name(int nr);
 long int parse_constant(char *constant_str, char **endptr);
