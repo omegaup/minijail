@@ -1,0 +1,21 @@
+language: c
+
+compiler: gcc
+
+addons:
+  apt:
+    packages:
+      - libelf-dev
+      - libcap-dev
+
+script:
+  - make
+  - make test
+
+sudo: false
+
+# GCC 4.6 has a bug where if { 0 } is used as an initializer, it complains that
+# some of the fields of the structure are not initalized. Ignore in Travis.
+# See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=36750
+env:
+  - CFLAGS=-Wno-missing-field-initializers

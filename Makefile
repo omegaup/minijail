@@ -23,6 +23,10 @@ all: CC_BINARY(minijail0) CC_LIBRARY(libminijail.so) \
 # TODO(jorgelo): convert to TEST().
 tests: CC_BINARY(libminijail_unittest) CC_BINARY(syscall_filter_unittest)
 
+test: CC_BINARY(syscall_filter_unittest) CC_BINARY(libminijail_unittest)
+	./libminijail_unittest
+	./syscall_filter_unittest
+
 CC_BINARY(minijail0): LDLIBS += -lcap -ldl -lrt
 CC_BINARY(minijail0): libconstants.gen.o libsyscalls.gen.o libminijail.o \
 		syscall_filter.o signal.o bpf.o util.o elfparse.o minijail0.o
