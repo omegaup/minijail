@@ -9,6 +9,7 @@ PRELOADNAME = libminijailpreload.so
 PRELOADPATH = \"/$(LIBDIR)/$(PRELOADNAME)\"
 CPPFLAGS += -DPRELOADPATH="$(PRELOADPATH)"
 CC ?= gcc
+DESTDIR ?= /
 
 ifneq ($(HAVE_SECUREBITS_H),no)
 CPPFLAGS += -DHAVE_SECUREBITS_H
@@ -19,6 +20,12 @@ endif
 
 all: CC_BINARY(minijail0) CC_LIBRARY(libminijail.so) \
 		CC_LIBRARY(libminijailpreload.so) CC_BINARY(ldwrapper)
+
+install: libminijailpreload.so minijail0 ldwrapper
+	install -d ${DESTDIR}/var/lib/minijail/bin && \
+		install -t ${DESTDIR}/var/lib/minijail/bin $^
+	install -d ${DESTDIR}/var/lib/minijail/scripts && \
+		install -t ${DESTDIR}/var/lib/minijail/scripts -m 0644 scripts/*
 
 # TODO(jorgelo): convert to TEST().
 tests: CC_BINARY(libminijail_unittest) CC_BINARY(syscall_filter_unittest)

@@ -19,3 +19,7 @@ sudo: false
 # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=36750
 env:
   - CFLAGS=-Wno-missing-field-initializers
+
+notifications:
+  slack:
+    secure: Dio9y2yGsNy51ko+JK4MwbVezaJ6iQs3Aw5G5aFzCZC5PjstNhe9srzdfJLpAa07WJov22Kwpe/pzPt4dyw7QgzguZqwdZVxts4xUTWL9Ur9NadVSnISeQzIij1iMfrJZ4k+BOygw0TPthNUXY5haOUZXjquD9RxoDWy9qLLi/M=
