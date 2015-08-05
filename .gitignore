@@ -1,0 +1,13 @@
+# Intermediate build files
+*.o
+*.d
+*.depends
+
+# Generated sources
+*.gen.c
+
+# Binaries
+*.so
+libminijail_unittest
+syscall_filter_unittest
+minijail0
