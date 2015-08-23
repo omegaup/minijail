@@ -8,6 +8,7 @@ LIBDIR = lib
 PRELOADNAME = libminijailpreload.so
 PRELOADPATH = \"/$(LIBDIR)/$(PRELOADNAME)\"
 CPPFLAGS += -DPRELOADPATH="$(PRELOADPATH)"
+CC ?= gcc
 
 ifneq ($(HAVE_SECUREBITS_H),no)
 CPPFLAGS += -DHAVE_SECUREBITS_H
@@ -52,10 +53,9 @@ libsyscalls.gen.o.depends: libsyscalls.gen.c
 
 # Only regenerate libsyscalls.gen.c if the Makefile or header changes.
 # NOTE! This will not detect if the file is not appropriate for the target.
-# TODO(jorgelo): fix generation when 'CC' env variable is not set.
 libsyscalls.gen.c: $(SRC)/Makefile $(SRC)/libsyscalls.h
 	@printf "Generating target-arch specific $@... "
-	$(QUIET)$(SRC)/gen_syscalls.sh $@
+	$(QUIET)CC=$(CC) $(SRC)/gen_syscalls.sh $@
 	@printf "done.\n"
 clean: CLEAN(libsyscalls.gen.c)
 
@@ -67,10 +67,9 @@ libconstants.gen.o.depends: libconstants.gen.c
 
 # Only regenerate libconstants.gen.c if the Makefile or header changes.
 # NOTE! This will not detect if the file is not appropriate for the target.
-# TODO(jorgelo): fix generation when 'CC' env variable is not set.
 libconstants.gen.c: $(SRC)/Makefile $(SRC)/libconstants.h
 	@printf "Generating target-arch specific $@... "
-	$(QUIET)$(SRC)/gen_constants.sh $@
+	$(QUIET)CC=$(CC) $(SRC)/gen_constants.sh $@
 	@printf "done.\n"
 clean: CLEAN(libconstants.gen.c)
 
