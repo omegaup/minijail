@@ -61,8 +61,6 @@ clean: CLEAN(libsyscalls.gen.c)
 
 $(eval $(call add_object_rules,libsyscalls.gen.o,CC,c,CFLAGS))
 
-libconstants.gen.o: CPPFLAGS += -I$(SRC)
-
 libconstants.gen.o.depends: libconstants.gen.c
 
 # Only regenerate libconstants.gen.c if the Makefile or header changes.
