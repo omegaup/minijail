@@ -213,7 +213,7 @@ int compile_atom(struct filter_block *head, char *atom,
 
 int compile_errno(struct filter_block *head, char *ret_errno)
 {
-	char *errno_ptr;
+	char *errno_ptr = NULL;
 
 	/* Splits the 'return' keyword and the actual errno value. */
 	char *ret_str = strtok_r(ret_errno, " ", &errno_ptr);
@@ -223,7 +223,7 @@ int compile_errno(struct filter_block *head, char *ret_errno)
 	char *errno_val_str = strtok_r(NULL, " ", &errno_ptr);
 
 	if (errno_val_str) {
-		char *errno_val_ptr;
+		char *errno_val_ptr = NULL;
 		int errno_val = parse_constant(errno_val_str, &errno_val_ptr);
 		/* Checks to see if we parsed an actual errno. */
 		if (errno_val_ptr == errno_val_str || errno_val == -1)
