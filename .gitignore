@@ -11,3 +11,4 @@
 libminijail_unittest
 syscall_filter_unittest
 minijail0
+ldwrapper

@@ -18,7 +18,7 @@ CPPFLAGS += -DUSE_SECCOMP_SOFTFAIL
 endif
 
 all: CC_BINARY(minijail0) CC_LIBRARY(libminijail.so) \
-		CC_LIBRARY(libminijailpreload.so)
+		CC_LIBRARY(libminijailpreload.so) CC_BINARY(ldwrapper)
 
 # TODO(jorgelo): convert to TEST().
 tests: CC_BINARY(libminijail_unittest) CC_BINARY(syscall_filter_unittest)
@@ -46,6 +46,9 @@ clean: CLEAN(libminijailpreload.so)
 CC_BINARY(syscall_filter_unittest): syscall_filter_unittest.o syscall_filter.o \
 		bpf.o util.o libconstants.gen.o libsyscalls.gen.o
 clean: CLEAN(syscall_filter_unittest)
+
+CC_BINARY(ldwrapper): ldwrapper.o
+clean: CLEAN(ldwrapper)
 
 libsyscalls.gen.o: CPPFLAGS += -I$(SRC)
 
