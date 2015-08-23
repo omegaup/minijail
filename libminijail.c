@@ -685,6 +685,8 @@ static int run_cap_valid(unsigned int cap)
 	if (!last_cap) {
 		const char cap_file[] = "/proc/sys/kernel/cap_last_cap";
 		FILE *fp = fopen(cap_file, "re");
+		if (fp == NULL)
+			pdie("fopen(%s)", cap_file);
 		if (fscanf(fp, "%u", &last_cap) != 1)
 			pdie("fscanf(%s)", cap_file);
 		fclose(fp);
@@ -789,6 +791,13 @@ void set_seccomp_filter(const struct minijail *j)
 
 void API minijail_enter(const struct minijail *j)
 {
+	/*
+	 * In case the cap_last_cap file is not available once we switch to the
+	 * read-only /proc filesystem, we get it preemptively here.
+	 */
+	if (j->flags.caps)
+		run_cap_valid(0);
+
 	if (j->flags.pids)
 		die("tried to enter a pid-namespaced jail;"
 		    " try minijail_run()?");
