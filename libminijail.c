@@ -634,6 +634,22 @@ int mount_tmp(void)
 	return mount("none", "/tmp", "tmpfs", 0, "size=64M,mode=777");
 }
 
+int unshare_vfs(void)
+{
+	if (unshare(CLONE_NEWNS))
+		return -errno;
+#if defined(MS_PRIVATE)
+	/*
+	 * Systems with systemd will have / be a shared mount instead
+	 * of a private mount, which makes the CLONE_NEWNS flag useless
+	 * unless we make / a private mount again.
+	 */
+	if (mount(NULL, "/", "none", MS_PRIVATE | MS_REC, NULL))
+		return -errno;
+#endif
+	return 0;
+}
+
 int remount_readonly(void)
 {
 	const char *kProcPath = "/proc";
@@ -813,7 +829,7 @@ void API minijail_enter(const struct minijail *j)
 	if (j->flags.enter_vfs && setns(j->mountns_fd, CLONE_NEWNS))
 		pdie("setns(CLONE_NEWNS)");
 
-	if (j->flags.vfs && unshare(CLONE_NEWNS))
+	if (j->flags.vfs && unshare_vfs())
 		pdie("unshare(vfs)");
 
 	if (j->flags.net && unshare(CLONE_NEWNET))
