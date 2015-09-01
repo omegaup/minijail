@@ -25,7 +25,7 @@ install: libminijailpreload.so minijail0 ldwrapper
 	install -d ${DESTDIR}/var/lib/minijail/bin && \
 		install -t ${DESTDIR}/var/lib/minijail/bin $^
 	install -d ${DESTDIR}/var/lib/minijail/scripts && \
-		install -t ${DESTDIR}/var/lib/minijail/scripts -m 0644 scripts/*
+		install -t ${DESTDIR}/var/lib/minijail/scripts -m 0644 scripts/${ARCH}/*
 
 # TODO(jorgelo): convert to TEST().
 tests: CC_BINARY(libminijail_unittest) CC_BINARY(syscall_filter_unittest)

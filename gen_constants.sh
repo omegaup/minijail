@@ -51,7 +51,7 @@ $(echo "$INCLUDES" | \
   grep -v '\(SIGRTMAX\|SIGRTMIN\|SIG_\|NULL\)' | \
   sort | \
   uniq | \
-  sed -e 's/#define \([A-Z0-9_]\+\).*$/#ifdef \1\n  { "\1", \1 },\n#endif  \/\/ \1/')
+  sed -e 's/#define \([A-Z0-9_]\+\).*$/#ifdef \1\n  { "\1", (unsigned long) \1 },\n#endif  \/\/ \1/')
   { NULL, 0 },
 };
 EOF

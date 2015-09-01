@@ -1,0 +1,55 @@
+ugetrlimit: 1
+open: 1
+mmap2: 1
+fstat64: 1
+close: 1
+dup: 1
+read: 1
+brk: 1
+write: 1
+rt_sigreturn: 1
+rt_sigaction: 1
+rt_sigprocmask: 1
+exit: 1
+fstat: 1
+lseek: 1
+socket: 1
+munmap: 1
+exit_group: 1
+gettimeofday: 1
+lstat: 1
+lstat64: 1
+readlink: 1
+access: 1
+stat: 1
+stat64: 1
+getpid: 1
+tgkill: 1
+unlink: 1
+writev: 1
+mprotect: 1
+getcwd: 1
+getrusage: 1
+umask: 1
+chmod: 1
+dup2: 1
+setrlimit: arg0 == RLIMIT_STACK; return EPERM
+prlimit64: arg1 == RLIMIT_STACK && arg2 != 0; return EPERM
+mremap: 1
+uname: 1
+chmod: 1
+restart_syscall: 1
+_llseek: 1
+ARM_set_tls: 1
+
+# Danger Zone!!!
+clone: 1
+vfork: 1
+execve: 1
+wait4: 1
+ioctl: 1
+futex: 1
+
+# Investigate
+fcntl: 1
+fcntl64: 1

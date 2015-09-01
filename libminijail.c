@@ -735,8 +735,7 @@ int unmount_proc(void)
 	 * and make our own.
 	 */
 	/* Some distros have JDK mount this. Unmount it without erroring out */
-	umount("/proc/sys/fs/binfmt_misc");
-	if (umount(kProcPath))
+	if (umount2(kProcPath, MNT_DETACH))
 		return -errno;
 	return 0;
 }
