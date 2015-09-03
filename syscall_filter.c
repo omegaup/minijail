@@ -157,7 +157,7 @@ int compile_atom(struct filter_block *head, char *atom,
 		struct bpf_labels *labels, int nr, int group_idx)
 {
 	/* Splits the atom. */
-	char *atom_ptr;
+	char *atom_ptr = NULL;
 	char *argidx_str = strtok_r(atom, " ", &atom_ptr);
 	char *operator_str = strtok_r(NULL, " ", &atom_ptr);
 	char *constant_str = strtok_r(NULL, " ", &atom_ptr);
@@ -173,7 +173,7 @@ int compile_atom(struct filter_block *head, char *atom,
 		return -1;
 	}
 
-	char *argidx_ptr;
+	char *argidx_ptr = NULL;
 	long int argidx = strtol(argidx_str + 3, &argidx_ptr, 10);
 	/*
 	 * Checks to see if an actual argument index
@@ -182,7 +182,7 @@ int compile_atom(struct filter_block *head, char *atom,
 	if (argidx_ptr == argidx_str + 3)
 		return -1;
 
-	char *constant_str_ptr;
+	char *constant_str_ptr = NULL;
 	long int c = parse_constant(constant_str, &constant_str_ptr);
 	if (constant_str_ptr == constant_str)
 		return -1;
@@ -202,7 +202,7 @@ int compile_atom(struct filter_block *head, char *atom,
 	 * If this comparison fails, the whole AND statement
 	 * will fail, so we jump to the end of this AND statement.
 	 */
-	struct sock_filter *comp_block;
+	struct sock_filter *comp_block = NULL;
 	size_t len = bpf_arg_comp(&comp_block, op, argidx, c, id);
 	if (len == 0)
 		return -1;
