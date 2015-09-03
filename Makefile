@@ -27,7 +27,7 @@ else
   SCRIPTS_ARCH := $(ARCH)
 endif
 
-install: libminijailpreload.so minijail0 ldwrapper
+install: libminijailpreload.so minijail0 ldwrapper mkroot
 	install -d $(DESTDIR)/var/lib/minijail/bin && \
 		install -t $(DESTDIR)/var/lib/minijail/bin $^
 	install -d $(DESTDIR)/var/lib/minijail/scripts && \
