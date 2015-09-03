@@ -21,11 +21,17 @@ endif
 all: CC_BINARY(minijail0) CC_LIBRARY(libminijail.so) \
 		CC_LIBRARY(libminijailpreload.so) CC_BINARY(ldwrapper)
 
+ifeq ($(ARCH),amd64)
+  SCRIPTS_ARCH := x86_64
+else
+  SCRIPTS_ARCH := $(ARCH)
+endif
+
 install: libminijailpreload.so minijail0 ldwrapper
-	install -d ${DESTDIR}/var/lib/minijail/bin && \
-		install -t ${DESTDIR}/var/lib/minijail/bin $^
-	install -d ${DESTDIR}/var/lib/minijail/scripts && \
-		install -t ${DESTDIR}/var/lib/minijail/scripts -m 0644 scripts/${ARCH}/*
+	install -d $(DESTDIR)/var/lib/minijail/bin && \
+		install -t $(DESTDIR)/var/lib/minijail/bin $^
+	install -d $(DESTDIR)/var/lib/minijail/scripts && \
+		install -t $(DESTDIR)/var/lib/minijail/scripts -m 0644 scripts/$(SCRIPTS_ARCH)/*
 
 # TODO(jorgelo): convert to TEST().
 tests: CC_BINARY(libminijail_unittest) CC_BINARY(syscall_filter_unittest)
