@@ -52,7 +52,7 @@ const struct constant_entry constant_table[] = {
 $(echo "$INCLUDES" | \
   ${CC} ${CFLAGS} -dD - -E | \
   grep '^#\s*define\s\+[A-Z][A-Z0-9_]*\s\+[^"{]' | \
-  grep -v '\(SIGRTMAX\|SIGRTMIN\|SIG_\|NULL\|SEQ_\|SIOC\)' | \
+  grep -v '\(SIGRTMAX\|SIGRTMIN\|SIG_\|NULL\|SEQ_\|SIOC\|MB_CUR_MAX\)' | \
   sort | \
   uniq | \
   sed -e 's/#define \([A-Z0-9_]\+\).*$/#ifdef \1\n  { "\1", (unsigned long) \1 },\n#endif  \/\/ \1/')
