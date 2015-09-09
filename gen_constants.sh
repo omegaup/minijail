@@ -27,6 +27,7 @@ OUTFILE="$1"
 
 INCLUDES='
 #include <asm/termbits.h>
+#include <asm/prctl.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/prctl.h>
