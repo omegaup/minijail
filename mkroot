@@ -252,11 +252,13 @@ def main(args):
 		root.symlink('/usr/lib/%s/librt.so' % abi, '/lib/%s/librt.so.1' % abi)
 		root.symlink('/usr/lib/%s/libdl.so' % abi, '/lib/%s/libdl.so.2' % abi)
 		root.copyfromhost('/usr/lib/%s/libffi.so' % abi)
-		root.copyfromhost('/usr/lib/%s/libLLVM-3.4.so.1' % abi)
-		root.copyfromhost('/usr/lib/%s/libedit.so.2' % abi)
-		root.copyfromhost('/usr/lib/llvm-3.4')
-		root.symlink('/usr/bin/opt', '/usr/lib/llvm-3.4/bin/opt')
-		root.symlink('/usr/bin/llc', '/usr/lib/llvm-3.4/bin/llc')
+                if is_arm:
+                    # These dependencies are ARM-specific.
+                    root.copyfromhost('/usr/lib/%s/libLLVM-3.4.so.1' % abi)
+                    root.copyfromhost('/usr/lib/%s/libedit.so.2' % abi)
+                    root.copyfromhost('/usr/lib/llvm-3.4')
+                    root.symlink('/usr/bin/opt', '/usr/lib/llvm-3.4/bin/opt')
+                    root.symlink('/usr/bin/llc', '/usr/lib/llvm-3.4/bin/llc')
 
 		root.copyfromhost('/usr/lib/fpc/')
 
