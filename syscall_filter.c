@@ -450,8 +450,11 @@ int compile_filter(FILE *policy_file, struct sock_fprog *prog,
 			struct filter_block *block =
 				compile_section(nr, policy_line, id, &labels);
 
-			if (!block)
+			if (!block) {
+				warn("compile_filter: failed to compile '%s'",
+				     policy_line);
 				return -1;
+			}
 
 			if (arg_blocks) {
 				extend_filter_block_list(arg_blocks, block);
