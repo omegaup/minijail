@@ -26,12 +26,16 @@ fi
 OUTFILE="$1"
 
 INCLUDES='
+#include <asm/termbits.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/prctl.h>
 #include <linux/sched.h>
-#include <stddef.h>
+#include <linux/soundcard.h>
 #include <signal.h>
+#include <sound/asound.h>
+#include <stddef.h>
+#include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>'
@@ -47,8 +51,8 @@ $INCLUDES
 const struct constant_entry constant_table[] = {
 $(echo "$INCLUDES" | \
   ${CC} ${CFLAGS} -dD - -E | \
-  grep '^#define [A-Z][A-Z0-9_]* ' | \
-  grep -v '\(SIGRTMAX\|SIGRTMIN\|SIG_\|NULL\)' | \
+  grep '^#\s*define\s\+[A-Z][A-Z0-9_]*\s\+[^"{]' | \
+  grep -v '\(SIGRTMAX\|SIGRTMIN\|SIG_\|NULL\|SEQ_\|SIOC\)' | \
   sort | \
   uniq | \
   sed -e 's/#define \([A-Z0-9_]\+\).*$/#ifdef \1\n  { "\1", (unsigned long) \1 },\n#endif  \/\/ \1/')
