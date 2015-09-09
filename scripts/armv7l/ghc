@@ -1,0 +1,77 @@
+# Exit
+exit: 1
+exit_group: 1
+
+# I/O
+_llseek: 1
+access: 1
+chmod: 1
+close: 1
+dup2: 1
+fcntl64: arg1 == F_GETFD || arg1 == F_GETFL || arg1 == F_SETFD || arg1 == F_SETFL
+fstat64: 1
+ftruncate64: 1
+getcwd: 1
+ioctl: return ENOTTY
+lseek: 1
+lstat64: 1
+mkdir: 1
+open: 1
+read: 1
+pread64: 1
+readlink: 1
+rmdir: 1
+stat64: 1
+umask: 1
+unlink: 1
+write: 1
+writev: 1
+
+# Events
+_newselect: 1
+epoll_create: 1
+epoll_ctl: 1
+epoll_wait: 1
+eventfd2: 1
+
+# Environment
+getrusage: 1
+getpid: 1
+prlimit64: arg0 == RLIMIT_STACK; return EPERM
+ugetrlimit: 1
+uname: 1
+
+# Signals
+pause: 1
+rt_sigaction: 1
+rt_sigprocmask: 1
+rt_sigreturn: 1
+sigreturn: 1
+
+# Time
+clock_getres: 1
+clock_gettime: 1
+gettimeofday: 1
+timer_create: 1
+timer_delete: 1
+timer_settime: 1
+
+# Processes/threads
+ARM_set_tls: 1
+clone: 1
+execve: 1
+futex: 1
+pipe: 1
+sched_yield: 1
+set_robust_list: 1
+set_tid_address: 1
+shmctl: 1
+vfork: 1
+wait4: 1
+
+# Memory
+brk: 1
+madvise: 1
+mmap2: 1
+mprotect: 1
+munmap: 1

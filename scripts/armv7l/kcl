@@ -1,0 +1,34 @@
+# Exit
+exit_group: 1
+exit: 1
+
+# I/O
+open: 1
+close: 1
+read: 1
+write: 1
+ioctl: 1
+readlink: 1
+stat64: 1
+fstat64: 1
+lstat64: 1
+access: 1
+lseek: 1
+
+# Time
+gettimeofday: 1
+
+# Memory
+mmap2: 1
+munmap: 1
+
+# Environment
+ugetrlimit: 1
+
+# Signals
+rt_sigaction: 1
+rt_sigprocmask: 1
+rt_sigreturn: 1
+
+# For ld-wrapper
+execve: 1

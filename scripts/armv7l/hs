@@ -1,0 +1,35 @@
+# Exit
+exit: 1
+exit_group: 1
+
+# I/O
+_newselect: 1
+close: 1
+dup: 1
+fcntl64: arg1 == F_GETFL
+fstat64: 1
+ioctl: return ENOTTY
+lseek: 1
+open: 1
+read: 1
+socket: return ENETDOWN
+write: 1
+
+# Time
+gettimeofday: 1
+clock_gettime: 1
+clock_getres: 1
+timer_create: 1
+timer_settime: 1
+timer_delete: 1
+
+# Memory
+brk: 1
+mmap2: 1
+mremap: 1
+munmap: 1
+
+# Signals
+rt_sigreturn: 1
+rt_sigaction: 1
+rt_sigprocmask: 1

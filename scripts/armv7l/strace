@@ -1,0 +1,27 @@
+# strace
+ARM_set_tls: 1
+access: 1
+clone: 1
+dup: 1
+execve: 1
+geteuid32: 1
+getgid32: 1
+getpid: 1
+gettid: 1
+getuid32: 1
+kill: 1
+mprotect: 1
+prlimit64: 1
+process_vm_readv: 1
+ptrace: 1
+rt_sigaction: 1
+rt_sigprocmask: 1
+set_robust_list: 1
+set_tid_address: 1
+setreuid32: 1
+stat64: 1
+tgkill: 1
+ugetrlimit: 1
+uname: 1
+wait4: 1
+

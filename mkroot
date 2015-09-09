@@ -191,11 +191,11 @@ def main(args):
 
 		root.symlink('/usr/bin/node', '/opt/nodejs/bin/node')
 		if is_x86_64:
-			root.symlink('/usr/lib/x86_64-linux-gnu/libruby-2.1.so.2.1',
-					'/usr/lib/ruby/2.1.0/libruby-2.1.so.2.1')
 			root.symlink('/usr/bin/java', '/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java')
 		elif is_arm:
-			root.symlink('/usr/bin/java', '/usr/lib/jvm/jdk-8-oracle-arm-vfp-hflt/jre/bin/java')
+			root.symlink('/usr/bin/java', '/usr/lib/jvm/java-8-openjdk-armhf/jre/bin/java')
+		root.symlink('/usr/lib/%s/libruby-2.1.so.2.1' % abi,
+				'/usr/lib/ruby/2.1.0/libruby-2.1.so.2.1')
 		root.symlink('/usr/bin/ruby', '/usr/lib/ruby/2.1.0/ruby')
 		root.symlink('/usr/bin/python', '/usr/lib/python2.7/python')
 		root.symlink('/usr/bin/ghc', '/usr/lib/ghc/lib/ghc')
@@ -252,6 +252,11 @@ def main(args):
 		root.symlink('/usr/lib/%s/librt.so' % abi, '/lib/%s/librt.so.1' % abi)
 		root.symlink('/usr/lib/%s/libdl.so' % abi, '/lib/%s/libdl.so.2' % abi)
 		root.copyfromhost('/usr/lib/%s/libffi.so' % abi)
+		root.copyfromhost('/usr/lib/%s/libLLVM-3.4.so.1' % abi)
+		root.copyfromhost('/usr/lib/%s/libedit.so.2' % abi)
+		root.copyfromhost('/usr/lib/llvm-3.4')
+		root.symlink('/usr/bin/opt', '/usr/lib/llvm-3.4/bin/opt')
+		root.symlink('/usr/bin/llc', '/usr/lib/llvm-3.4/bin/llc')
 
 		root.copyfromhost('/usr/lib/fpc/')
 
@@ -270,8 +275,10 @@ def main(args):
 
 		root.symlink('/usr/lib/%s/libruby-2.1.so.2.1' % abi,
 				'/usr/lib/ruby/2.1.0/libruby-2.1.so.2.1')
-		root.symlink('/usr/bin/javac',
-				'/usr/lib/jvm/java-8-openjdk-amd64/bin/javac')
+		if is_x86_64:
+			root.symlink('/usr/bin/javac', '/usr/lib/jvm/java-8-openjdk-amd64/bin/javac')
+		elif is_arm:
+			root.symlink('/usr/bin/javac', '/usr/lib/jvm/java-8-openjdk-armhf/bin/javac')
 		root.symlink('/usr/bin/ruby', '/usr/lib/ruby/2.1.0/ruby')
 		root.symlink('/usr/bin/python', '/usr/lib/python2.7/python')
 		root.symlink('/usr/bin/ghc', '/usr/lib/ghc/lib/ghc')

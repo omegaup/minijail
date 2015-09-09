@@ -1,0 +1,63 @@
+# Exit
+exit: 1
+exit_group: 1
+
+# Identification
+geteuid32: 1
+gettid: 1
+getuid32: 1
+
+# I/O
+_llseek: 1
+access: 1
+close: 1
+fcntl64: arg1 == F_GETFD || arg1 == F_SETFD && arg2 == FD_CLOEXEC
+fstat64: 1
+ftruncate: 1
+getcwd: 1
+getdents64: 1
+lseek: 1
+lstat64: 1
+mkdir: 1
+open: 1
+openat: 1
+read: 1
+readlink: 1
+socket: return ENETDOWN
+stat64: 1
+unlink: 1
+write: 1
+
+# Memory
+brk: 1
+madvise: 1
+mmap2: 1
+mprotect: 1
+mremap: 1
+munmap: 1
+
+# Time
+clock_getres: 1
+clock_gettime: 1
+gettimeofday: 1
+nanosleep: 1
+
+# System information
+ugetrlimit: 1
+setrlimit: arg0 == RLIMIT_STACK; return EPERM
+sysinfo: 1
+uname: 1
+
+# Threads/processes
+clone: arg0 == CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID
+futex: 1
+kill: arg0 == 0 && arg1 == SIGCHLD
+sched_getaffinity: 1
+sched_yield: 1
+set_robust_list: 1
+tgkill: arg0 == 2
+
+# Signals
+rt_sigreturn: 1
+rt_sigprocmask: 1
+rt_sigaction: 1
