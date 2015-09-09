@@ -7,6 +7,7 @@
  * pid_t, timer_t, and clock_t are defined. */
 #include <stdlib.h>
 #include <unistd.h>
+#include <syscall.h>
 
 #include <asm/siginfo.h>
 #define __have_siginfo_t 1
@@ -45,7 +46,7 @@ void log_sigsys_handler(int nr, siginfo_t *info, void *void_context)
 	 * This should never ever return, but we're paranoid.
 	 */
 	for (;;)
-		_exit(1);
+		syscall(__NR_exit_group, 1);
 }
 
 int install_sigsys_handler()
