@@ -7,6 +7,7 @@ import os
 import os.path
 import platform
 import shutil
+import subprocess
 import sys
 import tarfile
 import urllib
@@ -139,6 +140,8 @@ def main(args):
 		abi = 'arm-linux-gnueabihf'
 
 	def install_common(root):
+		if not os.path.exists('/usr/lib/locale/locale-archive'):
+			subprocess.check_call(['/usr/sbin/locale-gen', '--purge', 'en_US.UTF-8'])
 		root.copyfromhost('/usr/lib/locale/locale-archive')
 		root.copyfromhost('/etc/localtime')
 
