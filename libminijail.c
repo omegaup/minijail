@@ -1044,7 +1044,13 @@ int init(struct minijail *j, pid_t rootpid)
 				usage.ru_maxrss * 1024);
 	}
 	if (signal_override) {
-		fprintf(j->meta_file, "signal:%d\n", signal_override);
+		int exit_signal = signal_override;
+		exit_signal_name = lookup_signal_name(exit_signal);
+		if (exit_signal_name) {
+			fprintf(j->meta_file, "signal:%s\n", exit_signal_name);
+		} else {
+			fprintf(j->meta_file, "signal_number:%d\n", exit_signal);
+		}
 		fclose(j->meta_file);
 		_exit(MINIJAIL_ERR_INIT);
 	} else if (!WIFEXITED(init_exitstatus)) {
