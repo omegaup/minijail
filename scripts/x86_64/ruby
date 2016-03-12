@@ -1,4 +1,5 @@
 read: 1
+readlink: 1
 write: 1
 open: 1
 openat: 1
