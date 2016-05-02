@@ -182,7 +182,11 @@ void minijail_time_limit(struct minijail *j, int msec_limit);
 void minijail_extra_wall_time(struct minijail *j, int extra_msec);
 void minijail_output_limit(struct minijail *j, int byte_limit);
 void minijail_memory_limit(struct minijail *j, int byte_limit);
-int minijail_meta_file(struct minijail *j, const char* meta_path);
+int minijail_meta_file(struct minijail *j, const char *meta_path);
+void minijail_close_all_files(struct minijail *j);
+int minijail_redirect_stdin(struct minijail *j, const char *stdin_path);
+int minijail_redirect_stdout(struct minijail *j, const char *stdout_path);
+int minijail_redirect_stderr(struct minijail *j, const char *stderr_path);
 
 #ifdef __cplusplus
 }; /* extern "C" */

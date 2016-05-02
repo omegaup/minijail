@@ -58,7 +58,8 @@ static void usage(const char *progn)
 	       "  -S <file>:  set seccomp filter using <file>\n"
 	       "              E.g., -S /usr/share/filters/<prog>.$(uname -m)\n"
 	       "  -t:         set the current time limit (msec)\n"
-	       "  -w:         add wall time (msec) to the current time limit\n");
+	       "  -w:         add wall time (msec) to the current time limit\n"
+	       "  -Z:         closes all open files\n");
 }
 
 static void seccomp_filter_usage(const char *progn)
@@ -80,7 +81,7 @@ static int parse_args(struct minijail *j, int argc, char *argv[],
 	const char *filter_path;
 	if (argc > 1 && argv[1][0] != '-')
 		return 1;
-	while ((opt = getopt(argc, argv, "S:C:d:b:hHLt:I:w:k:O:m:M:0:1:2:")) != -1) {
+	while ((opt = getopt(argc, argv, "S:C:d:b:hHLt:I:w:k:O:m:M:0:1:2:Z")) != -1) {
 		switch (opt) {
 		case 's':
 			minijail_use_seccomp(j);
@@ -141,24 +142,21 @@ static int parse_args(struct minijail *j, int argc, char *argv[],
 				exit(1);
 			}
 			break;
+		case 'Z':
+			minijail_close_all_files(j);
+			break;
 		case '0':
-			close(0);
-			if (open(optarg, O_RDONLY) != 0) {
-				perror("open");
+			if (minijail_redirect_stdin(j, optarg)) {
 				exit(1);
 			}
 			break;
 		case '1':
-			close(1);
-			if (open(optarg, O_WRONLY | O_CREAT | O_TRUNC, 0644) != 1) {
-				perror("open");
+			if (minijail_redirect_stdout(j, optarg)) {
 				exit(1);
 			}
 			break;
 		case '2':
-			close(2);
-			if (open(optarg, O_WRONLY | O_CREAT | O_TRUNC, 0644) != 2) {
-				perror("open");
+			if (minijail_redirect_stderr(j, optarg)) {
 				exit(1);
 			}
 			break;

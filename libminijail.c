@@ -107,6 +107,10 @@ struct minijail {
 		int output_limit:1;
 		int memory_limit:1;
 		int meta_file:1;
+		int close_all_files:1;
+		int redirect_stdin:1;
+		int redirect_stdout:1;
+		int redirect_stderr:1;
 	} flags;
 	uid_t uid;
 	gid_t gid;
@@ -939,6 +943,61 @@ void API minijail_enter(const struct minijail *j)
 		if (prctl
 		    (PR_SET_SECUREBITS, SECURE_ALL_BITS | SECURE_ALL_LOCKS))
 			pdie("prctl(PR_SET_SECUREBITS)");
+	}
+
+	/*
+	 * File descriptor management.
+	 */
+	if (j->flags.close_all_files) {
+		long max_filedescriptor = sysconf(_SC_OPEN_MAX);
+		if (max_filedescriptor == -1) {
+			max_filedescriptor = 1024;
+		}
+		long fd;
+		for (fd = 0; fd < max_filedescriptor; ++fd) {
+			// We set up some pipes that need to be up.
+			if (fd == j->syscall_pipe_fds[1]) {
+				continue;
+			}
+			// Ignore errors.
+			close(fd);
+		}
+	}
+	if (j->flags.redirect_stdin) {
+		int fd = open("/dev/stdin", O_RDONLY | O_NOFOLLOW);
+		if (fd == -1) {
+			pdie("open(stdin)");
+		}
+		if (fd != 0) {
+			if (dup2(fd, 0) != 0) {
+				pdie("dup2(stdin)");
+			}
+			close(fd);
+		}
+	}
+	if (j->flags.redirect_stdout) {
+		int fd = open("/dev/stdout", O_WRONLY | O_TRUNC | O_NOFOLLOW);
+		if (fd == -1) {
+			pdie("open(stdout)");
+		}
+		if (fd != 1) {
+			if (dup2(fd, 1) != 1) {
+				pdie("dup2(stdout)");
+			}
+			close(fd);
+		}
+	}
+	if (j->flags.redirect_stderr) {
+		int fd = open("/dev/stderr", O_RDONLY | O_TRUNC | O_NOFOLLOW);
+		if (fd == -1) {
+			pdie("open(stderr)");
+		}
+		if (fd != 2) {
+			if (dup2(fd, 2) != 2) {
+				pdie("dup2(stderr)");
+			}
+			close(fd);
+		}
 	}
 
 	/*
@@ -1811,4 +1870,45 @@ int API minijail_meta_file(struct minijail *j, const char *meta_path)
 		return -1;
 	}
 	return 0;
+}
+
+void API minijail_close_all_files(struct minijail *j)
+{
+	j->flags.close_all_files = 1;
+}
+
+int API minijail_redirect_stdin(struct minijail *j, const char *stdin_path)
+{
+	j->flags.redirect_stdin = 1;
+	int fd = open(stdin_path, O_RDONLY | O_NOFOLLOW);
+	if (fd== -1) {
+		perror("open(stdin)");
+		return -1;
+	}
+	close(fd);
+	return minijail_bind(j, stdin_path, "/dev/stdin", 0);
+}
+
+int API minijail_redirect_stdout(struct minijail *j, const char *stdout_path)
+{
+	j->flags.redirect_stdout = 1;
+	int fd = open(stdout_path, O_WRONLY | O_CREAT | O_NOFOLLOW, 0644);
+	if (fd == -1) {
+		perror("open(stdout)");
+		return -1;
+	}
+	close(fd);
+	return minijail_bind(j, stdout_path, "/dev/stdout", 1);
+}
+
+int API minijail_redirect_stderr(struct minijail *j, const char *stderr_path)
+{
+	j->flags.redirect_stderr = 1;
+	int fd = open(stderr_path, O_WRONLY | O_CREAT | O_NOFOLLOW, 0644);
+	if (fd == -1) {
+		perror("open(stderr)");
+		return -1;
+	}
+	close(fd);
+	return minijail_bind(j, stderr_path, "/dev/stderr", 1);
 }
