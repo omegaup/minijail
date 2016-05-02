@@ -1450,6 +1450,8 @@ int API minijail_run_pid_pipes(struct minijail *j, const char *filename,
 						     0	/* read end */);
 
 		return 0;
+	} else {
+		close(pipe_fds[1]);	/* write endpoint */
 	}
 	free(oldenv_copy);
 
