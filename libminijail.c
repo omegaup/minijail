@@ -988,7 +988,7 @@ void API minijail_enter(const struct minijail *j)
 		}
 	}
 	if (j->flags.redirect_stderr) {
-		int fd = open("/dev/stderr", O_RDONLY | O_TRUNC | O_NOFOLLOW);
+		int fd = open("/dev/stderr", O_WRONLY | O_TRUNC | O_NOFOLLOW);
 		if (fd == -1) {
 			pdie("open(stderr)");
 		}
