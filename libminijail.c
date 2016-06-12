@@ -123,6 +123,7 @@ struct minijail {
 	int binding_count;
 	char *chrootdir;
 	char *chdir;
+	int log_level;
 	struct sock_fprog *filter_prog;
 	struct binding *bindings_head;
 	struct binding *bindings_tail;
@@ -191,7 +192,11 @@ void minijail_preexec(struct minijail *j)
 
 struct minijail API *minijail_new(void)
 {
-	return calloc(1, sizeof(struct minijail));
+	struct minijail *j = calloc(1, sizeof(struct minijail));
+	if (j) {
+		j->log_level = LOG_INFO;
+	}
+	return j;
 }
 
 void API minijail_change_uid(struct minijail *j, uid_t uid)
@@ -344,6 +349,16 @@ void API minijail_disable_ptrace(struct minijail *j)
 	j->flags.ptrace = 1;
 }
 
+void API minijail_log_level(struct minijail *j, int syslog_priority)
+{
+	j->log_level = syslog_priority;
+}
+
+int API minijail_get_log_level(struct minijail *j)
+{
+	return j->log_level;
+}
+
 void API minijail_run_as_init(struct minijail *j)
 {
 	/*
@@ -401,7 +416,7 @@ int API minijail_bind(struct minijail *j, const char *src, const char *dest,
 		goto error;
 	b->writeable = writeable;
 
-	info("bind %s -> %s", src, dest);
+	info(j->log_level, "bind %s -> %s", src, dest);
 
 	/*
 	 * Force vfs namespacing so the bind mounts don't leak out into the
@@ -429,7 +444,8 @@ void API minijail_parse_seccomp_filters(struct minijail *j, const char *path)
 {
 	if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, NULL)) {
 		if ((errno == ENOSYS) && SECCOMP_SOFTFAIL) {
-			warn("not loading seccomp filter, seccomp not supported");
+			warn(j->log_level,
+			     "not loading seccomp filter, seccomp not supported");
 			return;
 		}
 	}
@@ -439,7 +455,7 @@ void API minijail_parse_seccomp_filters(struct minijail *j, const char *path)
 	}
 
 	struct sock_fprog *fprog = malloc(sizeof(struct sock_fprog));
-	if (compile_filter(file, fprog, j->flags.log_seccomp_filter)) {
+	if (compile_filter(file, fprog, j->flags.log_seccomp_filter, j->log_level)) {
 		die("failed to compile seccomp filter BPF program in '%s'",
 		    path);
 	}
@@ -881,7 +897,7 @@ void set_seccomp_filter(const struct minijail *j)
 	if (j->flags.seccomp_filter) {
 		if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, j->filter_prog)) {
 			if ((errno == ENOSYS) && SECCOMP_SOFTFAIL) {
-				warn("seccomp not supported");
+				warn(j->log_level, "seccomp not supported");
 				return;
 			}
 			pdie("prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER)");
@@ -1032,7 +1048,7 @@ void API minijail_enter(const struct minijail *j)
 	 */
 	if (j->flags.seccomp && prctl(PR_SET_SECCOMP, 1)) {
 		if ((errno == ENOSYS) && SECCOMP_SOFTFAIL) {
-			warn("seccomp not supported");
+			warn(j->log_level, "seccomp not supported");
 			return;
 		}
 		pdie("prctl(PR_SET_SECCOMP)");
@@ -1672,7 +1688,7 @@ int API minijail_wait(struct minijail *j)
 		int error_status = st;
 		if (WIFSIGNALED(st)) {
 			int signum = WTERMSIG(st);
-			warn("child process %d received signal %d",
+			warn(j->log_level, "child process %d received signal %d",
 			     j->initpid, signum);
 			/*
 			 * We return MINIJAIL_ERR_JAIL if the process received
@@ -1692,7 +1708,7 @@ int API minijail_wait(struct minijail *j)
 
 	int exit_status = WEXITSTATUS(st);
 	if (exit_status != 0)
-		info("child process %d exited with status %d",
+		info(j->log_level, "child process %d exited with status %d",
 		     j->initpid, exit_status);
 
 	return exit_status;

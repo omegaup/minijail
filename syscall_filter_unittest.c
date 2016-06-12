@@ -542,7 +542,7 @@ FIXTURE_TEARDOWN(filter) {}
 TEST_F(filter, seccomp_mode1) {
 	struct sock_fprog actual;
 	FILE *policy = fopen("test/seccomp.policy", "r");
-	int res = compile_filter(policy, &actual, NO_LOGGING);
+	int res = compile_filter(policy, &actual, NO_LOGGING, LOG_INFO);
 
 	/*
 	 * Checks return value, filter length, and that the filter
@@ -572,7 +572,7 @@ TEST_F(filter, seccomp_mode1) {
 TEST_F(filter, seccomp_read_write) {
 	struct sock_fprog actual;
 	FILE *policy = fopen("test/stdin_stdout.policy", "r");
-	int res = compile_filter(policy, &actual, NO_LOGGING);
+	int res = compile_filter(policy, &actual, NO_LOGGING, LOG_INFO);
 
 	/*
 	 * Checks return value, filter length, and that the filter
@@ -606,12 +606,12 @@ TEST_F(filter, invalid) {
 	struct sock_fprog actual;
 
 	FILE *policy = fopen("test/invalid_syscall_name.policy", "r");
-	int res = compile_filter(policy, &actual, NO_LOGGING);
+	int res = compile_filter(policy, &actual, NO_LOGGING, LOG_INFO);
 	ASSERT_NE(res, 0);
 	fclose(policy);
 
 	policy = fopen("test/invalid_arg_filter.policy", "r");
-	res = compile_filter(policy, &actual, NO_LOGGING);
+	res = compile_filter(policy, &actual, NO_LOGGING, LOG_INFO);
 	ASSERT_NE(res, 0);
 	fclose(policy);
 }
@@ -620,7 +620,7 @@ TEST_F(filter, nonexistent) {
 	struct sock_fprog actual;
 
 	FILE *policy = fopen("test/nonexistent-file.policy", "r");
-	int res = compile_filter(policy, &actual, NO_LOGGING);
+	int res = compile_filter(policy, &actual, NO_LOGGING, LOG_INFO);
 	ASSERT_NE(res, 0);
 }
 
@@ -628,7 +628,7 @@ TEST_F(filter, log) {
 	struct sock_fprog actual;
 
 	FILE *policy = fopen("test/seccomp.policy", "r");
-	int res = compile_filter(policy, &actual, USE_LOGGING);
+	int res = compile_filter(policy, &actual, USE_LOGGING, LOG_INFO);
 
 	size_t i;
 	size_t index = 0;

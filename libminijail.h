@@ -60,6 +60,12 @@ void minijail_run_as_init(struct minijail *j);
 void minijail_inherit_usergroups(struct minijail *j);
 void minijail_disable_ptrace(struct minijail *j);
 
+/* Sets the minimum syslog priority to display. */
+void minijail_log_level(struct minijail *j, int syslog_priority);
+
+/* Gets the minimum syslog priority to display. */
+int minijail_get_log_level(struct minijail *j);
+
 /* minijail_enter_chroot: enables chroot() restriction for @j
  * @j   minijail to apply restriction to
  * @dir directory to chroot() to. Owned by caller.

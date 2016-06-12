@@ -288,7 +288,8 @@ int main(int argc, char *argv[])
 	}
 
 	if (exit_immediately) {
-		info("not running init loop, exiting immediately");
+		info(minijail_get_log_level(j),
+		     "not running init loop, exiting immediately");
 		return 0;
 	}
 	return minijail_wait(j);
