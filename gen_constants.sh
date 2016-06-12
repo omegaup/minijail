@@ -27,19 +27,22 @@ OUTFILE="$1"
 
 INCLUDES='
 #include <asm/termbits.h>
-#include <asm/prctl.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <linux/prctl.h>
 #include <linux/sched.h>
 #include <linux/soundcard.h>
 #include <signal.h>
 #include <sound/asound.h>
 #include <stddef.h>
 #include <sys/ioctl.h>
+#include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/types.h>'
+#include <sys/types.h>
+
+#if defined(__x86_64__) || defined(__i386__)
+#include <asm/prctl.h>
+#endif'
 
 # Passes the previous list of #includes to the C preprocessor and prints out
 # all #defines whose name is all-caps.  Excludes a few symbols that are known
