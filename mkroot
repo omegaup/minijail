@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 
 import apt
 import argparse
@@ -217,7 +217,7 @@ def main(args):
   PYTHON_FILES = resolver.files_for('python2.7')
   HASKELL_FILES = resolver.files_for('ghc', exclude_packages=COMPILER_PACKAGES)
   JAVA_FILES = resolver.files_for(['openjdk-8-jdk', 'openjdk-8-jre',
-      'openjdk-8-jre-headless'], recursive=False, exclude_files=['/etc'])
+      'openjdk-8-jre-headless', 'openjdk-8-jdk-headless'], recursive=False, exclude_files=['/etc'])
 
   def install_common(root):
     if not os.path.exists('/usr/lib/locale/locale-archive'):
