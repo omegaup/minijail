@@ -17,7 +17,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <syslog.h>
 #include <unistd.h>
 
 static int (*real_main) (int, char **, char **);
@@ -25,7 +24,7 @@ static void *libc_handle;
 
 static void die(const char *failed)
 {
-	syslog(LOG_ERR, "libminijail: %s", failed);
+	fprintf(stderr, "libminijail: %s\n", failed);
 	abort();
 }
 
@@ -123,7 +122,7 @@ int API __libc_start_main(int (*main) (int, char **, char **),
 	libc_handle = dlopen("libc.so.6", RTLD_NOW);
 
 	if (!libc_handle) {
-		syslog(LOG_ERR, "can't dlopen() libc");
+		fprintf(stderr, "can't dlopen() libc\n");
 		/* We dare not use abort() here because it will run atexit()
 		 * handlers and try to flush stdio.
 		 */
@@ -131,7 +130,7 @@ int API __libc_start_main(int (*main) (int, char **, char **),
 	}
 	sym = dlsym(libc_handle, "__libc_start_main");
 	if (!sym) {
-		syslog(LOG_ERR, "can't find the real __libc_start_main()");
+		fprintf(stderr, "can't find the real __libc_start_main()\n");
 		_exit(1);
 	}
 	real_libc_start_main.symval = sym;

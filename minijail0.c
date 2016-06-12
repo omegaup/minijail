@@ -105,9 +105,6 @@ static int parse_args(struct minijail *j, int argc, char *argv[],
 			}
 			use_seccomp_filter = 1;
 			break;
-		case 'L':
-			minijail_log_seccomp_filter_failures(j);
-			break;
 		case 'b':
 			add_binding(j, optarg);
 			break;
