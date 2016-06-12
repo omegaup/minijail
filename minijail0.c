@@ -200,6 +200,7 @@ int main(int argc, char *argv[])
 	clearenv();
 	setenv("HOME", "/home", 1);
 	setenv("LANG", "en_US.UTF-8", 1);
+	setenv("PATH", "/usr/bin", 1);
 
 	struct minijail *j = minijail_new();
 	// Change credentials to the original user so this never runs as root.
