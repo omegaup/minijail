@@ -20,11 +20,15 @@
 #define pdie(_msg, ...) \
 	die(_msg ": %m", ## __VA_ARGS__)
 
-#define warn(_msg, ...) \
-	syslog(LOG_WARNING, "libminijail: " _msg, ## __VA_ARGS__)
+#define warn(_log_level, _msg, ...) do {\
+	if (_log_level >= LOG_WARNING) \
+		syslog(LOG_WARNING, "libminijail: " _msg, ## __VA_ARGS__); \
+} while (0)
 
-#define info(_msg, ...) \
-	syslog(LOG_INFO, "libminijail: " _msg, ## __VA_ARGS__)
+#define info(_log_level, _msg, ...) do {\
+	if (_log_level >= LOG_INFO) \
+		syslog(LOG_INFO, "libminijail: " _msg, ## __VA_ARGS__); \
+} while (0)
 
 extern const char *log_syscalls[];
 extern const size_t log_syscalls_len;

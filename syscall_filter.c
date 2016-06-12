@@ -122,11 +122,11 @@ void append_allow_syscall(struct filter_block *head, int nr)
 	append_filter_block(head, filter, len);
 }
 
-void allow_log_syscalls(struct filter_block *head)
+void allow_log_syscalls(struct filter_block *head, int log_level)
 {
 	unsigned int i;
 	for (i = 0; i < log_syscalls_len; i++) {
-		warn("allowing syscall: %s", log_syscalls[i]);
+		warn(log_level, "allowing syscall: %s", log_syscalls[i]);
 		append_allow_syscall(head, lookup_syscall(log_syscalls[i]));
 	}
 }
@@ -368,7 +368,7 @@ struct filter_block *compile_section(int nr, const char *policy_line,
 }
 
 int compile_filter(FILE *policy_file, struct sock_fprog *prog,
-		int log_failures)
+		int log_failures, int log_level)
 {
 	char line[MAX_LINE_LENGTH];
 	int line_count = 0;
@@ -394,7 +394,7 @@ int compile_filter(FILE *policy_file, struct sock_fprog *prog,
 
 	/* If we're logging failures, allow the necessary syscalls first. */
 	if (log_failures)
-		allow_log_syscalls(head);
+		allow_log_syscalls(head, log_level);
 
 	/*
 	 * Loop through all the lines in the policy file.
@@ -421,7 +421,7 @@ int compile_filter(FILE *policy_file, struct sock_fprog *prog,
 
 		nr = lookup_syscall(syscall_name);
 		if (nr < 0) {
-			warn("compile_filter: nonexistent syscall '%s'",
+			warn(log_level, "compile_filter: nonexistent syscall '%s'",
 			     syscall_name);
 			return -1;
 		}
@@ -451,7 +451,7 @@ int compile_filter(FILE *policy_file, struct sock_fprog *prog,
 				compile_section(nr, policy_line, id, &labels);
 
 			if (!block) {
-				warn("compile_filter: failed to compile '%s'",
+				warn(log_level, "compile_filter: failed to compile '%s'",
 				     policy_line);
 				return -1;
 			}
