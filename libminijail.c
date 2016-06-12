@@ -1845,6 +1845,20 @@ int API minijail_get_path(const struct minijail *j, char *buffer,
 	}
 	linkpath[linklen] = '\0';
 
+	// Relativize the symbolic link.
+	if (linkpath[0] != '/') {
+		strncpy(buffer, path, buffer_len);
+		char* basename = strrchr(buffer, '/');
+		if (basename != NULL) {
+			*basename = '\0';
+			if (0 != concat_path(buffer, buffer_len - (basename - buffer), linkpath))
+				return 1;
+			if (strlen(buffer) > PATH_MAX)
+				return 1;
+			strncpy(linkpath, buffer, sizeof(linkpath));
+		}
+	}
+
 	// Recursively try to figure out the real path.
 	return minijail_get_path(j, buffer, buffer_len, linkpath);
 }
