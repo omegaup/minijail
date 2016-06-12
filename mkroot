@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import apt
 import argparse
 import glob
 import hashlib
@@ -7,322 +8,319 @@ import os
 import os.path
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
 import urllib
 
+# Class that enumerates all files installed by a certain Debian package.
+# Can work both recursively and non-recursively.
+class FileResolver:
+  def __init__(self, exclude_files=None):
+    self.apt_cache = apt.Cache()
+    self.files = {}
+    if exclude_files is None:
+      self.exclude_files = ['/usr/share']
+    else:
+      self.exclude_files = exclude_files[:]
+
+  def files_for(self, package_names, exclude_packages=None, recursive=True,
+      include=None, exclude_files=None):
+    result = set()
+    if isinstance(package_names, str):
+      package_names = [package_names]
+    if not exclude_packages:
+      exclude_packages = []
+    for name in package_names:
+      result.update(self.__files_for(name, exclude_packages=exclude_packages,
+        recursive=recursive))
+    excluded = set()
+    if include:
+      for f in result:
+        if not any(f.startswith(x) for x in include):
+          excluded.add(f)
+    if exclude_files:
+      for f in result:
+        if any(f.startswith(x) for x in exclude_files):
+          excluded.add(f)
+    result.symmetric_difference_update(excluded)
+    return result
+
+  def __files_for(self, name, exclude_packages, recursive, identation=1):
+    if name in exclude_packages:
+      return set()
+    if name in self.files:
+      return self.files[name]
+    pkg = self.apt_cache[name]
+    self.files[name] = set()
+    for f in pkg.installed_files:
+      if not f or any(f.startswith(x) for x in self.exclude_files): continue
+      if not os.path.exists(f): continue
+      st = os.lstat(f)
+      if stat.S_ISDIR(st.st_mode): continue
+      self.files[name].add(f)
+    if recursive and pkg.installed:
+      for or_dep in pkg.installed.get_dependencies('Depends'):
+        for dep in or_dep:
+          self.files[name].update(self.__files_for(dep.name, exclude_packages,
+            recursive, identation + 1))
+          break
+    return self.files[name]
+
 # Utilities to set up a chroot jail filesystem for minijail.  Files are
 # hardlinked instead of copied when possible.
 class Chroot:
-	def __init__(self, path, mountpoint, link=True):
-		self.__link = link
-		self.chroot = path
-		self.mountpoint = mountpoint
-		if not self.mountpoint.endswith('/'):
-			self.mountpoint += '/'
-		if os.path.exists(path):
-			shutil.rmtree(path, True)
-		os.mkdir(path)
-	
-	def __chroot_path(self, path, relative_to=None):
-                root = relative_to
-                if root is None:
-                    root = self.mountpoint
-		assert path.startswith(root.rstrip('/')), '%s does not start with %s' % (path, root)
-		return self.chroot + path[len(root)-1:]
+  def __init__(self, path, mountpoint, link=True):
+    self.__link = link
+    self.chroot = path
+    self.mountpoint = mountpoint
+    if not self.mountpoint.endswith('/'):
+      self.mountpoint += '/'
+    if os.path.exists(path):
+      shutil.rmtree(path, True)
+    os.mkdir(path)
 
-	def mkdir(self, path, relative_to=None):
-		path_components = os.path.relpath(self.__chroot_path(path, relative_to),
-			self.chroot).split('/')
-		for i in xrange(len(path_components) + 1):
-			path = os.path.join(self.chroot, *path_components[:i])
-			if not os.path.isdir(path):
-				os.mkdir(path)
+  def __chroot_path(self, path, relative_to=None):
+    root = relative_to
+    if root is None:
+      root = self.mountpoint
+    assert path.startswith(root.rstrip('/')), '%s does not start with %s' % (path, root)
+    return self.chroot + path[len(root)-1:]
 
-	def copyfromhost(self, path, relative_to=None, exclude=[]):
-		if '*' in path:
-			for p in glob.glob(path):
-				self.copyfromhost(p, relative_to, exclude)
-			return
-		try:
-			self.mkdir(os.path.dirname(path), relative_to)
-		except AssertionError:
-			# The roots might try to create their parent directory,
-			# which will be outside the root.
-			pass
-		if os.path.isdir(os.path.realpath(path)):
-			for root, dirs, files in os.walk(path):
-				if any([root.startswith(e) for e in exclude]): continue
-				self.mkdir(root, relative_to)
-				for f in files:
-					filepath = os.path.join(root, f)
-					if os.path.islink(filepath):
-						target = os.readlink(filepath)
-						abspath = os.path.realpath(os.path.join(os.path.dirname(filepath), target))
-						if abspath.startswith(self.mountpoint):
-							self.symlink(filepath, target)
-						else:
-							try:
-								self.install(filepath, abspath, relative_to)
-							except OSError, e:
-								print e, abspath, filepath
-					else:
-						self.install(filepath, os.path.realpath(filepath), relative_to)
-				for d in dirs:
-					dirpath = os.path.join(root, d)
-					if os.path.islink(dirpath):
-						target = os.readlink(dirpath)
-						abspath = os.path.realpath(os.path.join(os.path.dirname(dirpath), target))
-						if abspath.startswith(self.mountpoint):
-							self.symlink(dirpath, target)
-						else:
-							shutil.copytree(abspath, self.__chroot_path(dirpath, relative_to))
-		else:
-			self.install(path, os.path.realpath(path), relative_to)
-	
-	def install(self, path, source, relative_to=None):
-		self.mkdir(os.path.dirname(path), relative_to)
-		while os.path.islink(source):
-			source = os.path.join(os.path.dirname(source),
-				os.readlink(source))
-		if self.__link:
-			os.link(source, self.__chroot_path(path, relative_to))
-		else:
-			shutil.copy(source, self.__chroot_path(path, relative_to))
+  def mkdir(self, path, relative_to=None):
+    path = os.path.join(self.chroot, os.path.relpath(self.__chroot_path(path, relative_to),
+      self.chroot))
+    if not os.path.isdir(path):
+        os.makedirs(path)
 
-	def symlink(self, path, destination):
-		self.mkdir(os.path.dirname(path))
-		os.symlink(destination, self.__chroot_path(path))
+  def touch(self, path, relative_to=None):
+    self.mkdir(os.path.dirname(path), relative_to)
+    path = os.path.join(self.chroot, os.path.relpath(self.__chroot_path(path, relative_to),
+      self.chroot))
+    if not os.path.isfile(path):
+        with open(path, 'w') as f:
+            pass
 
-	def write(self, path, contents):
-		self.mkdir(os.path.dirname(path))
-		f = open(self.__chroot_path(path), 'w')
-		f.write(contents)
-		f.close()
-		os.utime(self.__chroot_path(path), (0, 0))
-	
-	def extract(self, archive, sha1, skipprefix, url, exclude=[]):
-		if not os.path.exists(archive):
-			urllib.urlretrieve(url, archive)
-		with open(archive, 'rb') as f:
-			assert(sha1 == hashlib.sha1(f.read()).hexdigest())
-		with tarfile.open(archive) as tar:
-			for member in tar.getmembers():
-				path = os.path.normpath(member.name)
-				if not path.startswith(skipprefix): continue
-				path = self.mountpoint + path[len(skipprefix):]
-				if any([path.startswith(e) for e in exclude]): continue
-				if member.issym():
-					self.symlink(path, member.linkname)
-				elif member.isfile():
-					self.mkdir(os.path.dirname(path))
-					with open(self.__chroot_path(path), 'w') as dst:
-						shutil.copyfileobj(tar.extractfile(member), dst, member.size)
-					os.chmod(self.__chroot_path(path), member.mode)
+  def copyfromhost(self, path, relative_to=None, exclude=[]):
+    if '*' in path:
+      for p in glob.glob(path):
+        self.copyfromhost(p, relative_to, exclude)
+      return
+    try:
+      self.mkdir(os.path.dirname(path), relative_to)
+    except AssertionError:
+      # The roots might try to create their parent directory,
+      # which will be outside the root.
+      pass
+    if os.path.isdir(os.path.realpath(path)):
+      for root, dirs, files in os.walk(path):
+        if any([root.startswith(e) for e in exclude]): continue
+        self.mkdir(root, relative_to)
+        for f in files:
+          filepath = os.path.join(root, f)
+          if os.path.islink(filepath):
+            target = os.readlink(filepath)
+            abspath = os.path.realpath(os.path.join(os.path.dirname(filepath), target))
+            if abspath.startswith(self.mountpoint):
+              self.symlink(filepath, target)
+            else:
+              try:
+                self.install(filepath, abspath, relative_to)
+              except OSError, e:
+                print e, abspath, filepath
+          else:
+            self.install(filepath, os.path.realpath(filepath), relative_to)
+        for d in dirs:
+          dirpath = os.path.join(root, d)
+          if os.path.islink(dirpath):
+            target = os.readlink(dirpath)
+            abspath = os.path.realpath(os.path.join(os.path.dirname(dirpath), target))
+            if abspath.startswith(self.mountpoint):
+              self.symlink(dirpath, target)
+            else:
+              shutil.copytree(abspath, self.__chroot_path(dirpath, relative_to))
+    else:
+      self.install(path, os.path.realpath(path), relative_to)
 
-	# __enter__ and __exit__ are just provided to support with for clarity of code.
-	def __enter__(self):
-		return self
+  def install(self, path, source, relative_to=None):
+    try:
+      self.mkdir(os.path.dirname(path), relative_to)
+      while os.path.islink(source):
+        source = os.path.join(os.path.dirname(source),
+          os.readlink(source))
+      if self.__link:
+        os.link(source, self.__chroot_path(path, relative_to))
+      else:
+        shutil.copy(source, self.__chroot_path(path, relative_to))
+    except Exception as e:
+      print>>sys.stderr, path, source
+      raise e
 
-	def __exit__(self, type, value, traceback):
-		pass
+  def symlink(self, path, destination):
+    self.mkdir(os.path.dirname(path))
+    try:
+      os.symlink(destination, self.__chroot_path(path))
+    except Exception as e:
+      print>>sys.stderr, path, source
+      raise e
+
+  def write(self, path, contents):
+    self.mkdir(os.path.dirname(path))
+    f = open(self.__chroot_path(path), 'w')
+    f.write(contents)
+    f.close()
+    os.utime(self.__chroot_path(path), (0, 0))
+
+  def extract(self, archive, sha1, skipprefix, url, exclude=[]):
+    if not os.path.exists(archive):
+      urllib.urlretrieve(url, archive)
+    with open(archive, 'rb') as f:
+      assert(sha1 == hashlib.sha1(f.read()).hexdigest())
+    with tarfile.open(archive) as tar:
+      for member in tar.getmembers():
+        path = os.path.normpath(member.name)
+        if not path.startswith(skipprefix): continue
+        path = self.mountpoint + path[len(skipprefix):]
+        if any([path.startswith(e) for e in exclude]): continue
+        if member.issym():
+          self.symlink(path, member.linkname)
+        elif member.isfile():
+          self.mkdir(os.path.dirname(path))
+          with open(self.__chroot_path(path), 'w') as dst:
+            shutil.copyfileobj(tar.extractfile(member), dst, member.size)
+          os.chmod(self.__chroot_path(path), member.mode)
+
+  # __enter__ and __exit__ are just provided to support with for clarity of code.
+  def __enter__(self):
+    return self
+
+  def __exit__(self, type, value, traceback):
+    pass
 
 def main(args):
-	is_arm = platform.machine().startswith('arm')
-	is_x86_64 = platform.machine().endswith('64')
+  resolver = FileResolver()
 
-	assert is_arm or is_x86_64, 'Unsupported architecture'
+  ROOT_PACKAGES = ['libc6', 'libcap2', 'libexpat1','libtinfo5', 'zlib1g',
+      'libffi6', 'libgmp10', 'libstdc++6', 'libreadline6', 'libssl1.0.0',
+      'libyaml-0-2', 'libgdbm3', 'ca-certificates']
+  COMPILER_PACKAGES = ROOT_PACKAGES + ['g++', 'gcc', 'libc6-dev', 'libgmp-dev',
+      'libbsd-dev', 'fp-compiler', 'libgfortran3', 'libitm1', 'libquadmath0',
+      'libtsan0', 'libffi-dev', 'binutils']
 
-	if is_x86_64:
-		abi = 'x86_64-linux-gnu'
-	elif is_arm:
-		abi = 'arm-linux-gnueabihf'
+  RUBY_ROOT = '/usr/lib/ruby/'
+  HASKELL_ROOT = '/usr/lib/ghc/'
+  PYTHON_ROOT = '/usr/lib/python2.7/'
+  JAVA_ROOT = '/usr/lib/jvm/'
 
-	def install_common(root):
-		if not os.path.exists('/usr/lib/locale/locale-archive'):
-			subprocess.check_call(['/usr/sbin/locale-gen', '--purge', 'en_US.UTF-8'])
-		root.copyfromhost('/usr/lib/locale/locale-archive')
-		root.copyfromhost('/etc/localtime')
+  RUBY_FILES = resolver.files_for('ruby', exclude_packages=COMPILER_PACKAGES)
+  PYTHON_FILES = resolver.files_for('python2.7')
+  HASKELL_FILES = resolver.files_for('ghc', exclude_packages=COMPILER_PACKAGES)
+  JAVA_FILES = resolver.files_for(['openjdk-8-jdk', 'openjdk-8-jre',
+      'openjdk-8-jre-headless'], recursive=False, exclude_files=['/etc'])
 
-		if is_x86_64:
-			root.copyfromhost('/lib64/ld-linux-x86-64.so.2')
-		elif is_arm:
-			root.copyfromhost('/lib/ld-linux-armhf.so.3')
-			root.copyfromhost('/usr/lib/arm-linux-gnueabihf/libcofi_rpi.so')
+  def install_common(root):
+    if not os.path.exists('/usr/lib/locale/locale-archive'):
+      subprocess.check_call(['/usr/sbin/locale-gen', '--purge', 'en_US.UTF-8'])
+    root.copyfromhost('/usr/lib/locale/locale-archive')
+    root.copyfromhost('/etc/localtime')
 
-		root.copyfromhost('/lib/%s/libc-2.*.so' % abi)
-		root.copyfromhost('/lib/%s/libc.so.6' % abi)
-		root.copyfromhost('/lib/%s/libcap.so.2' % abi)
-		root.copyfromhost('/lib/%s/libcrypt.so.1' % abi)
-		root.copyfromhost('/lib/%s/libdl.so.2' % abi)
-		root.copyfromhost('/lib/%s/libexpat.so.1' % abi)
-		root.copyfromhost('/lib/%s/libgcc_s.so.1' % abi)
-		root.copyfromhost('/lib/%s/libm.so.6' % abi)
-		root.copyfromhost('/lib/%s/libpthread.so.0' % abi)
-		root.copyfromhost('/lib/%s/librt.so.1' % abi)
-		root.copyfromhost('/lib/%s/libtinfo.so.5' % abi)
-		root.copyfromhost('/lib/%s/libutil.so.1' % abi)
-		root.copyfromhost('/lib/%s/libz.so.1' % abi)
-		root.copyfromhost('/usr/lib/%s/libffi.so.6' % abi)
-		root.copyfromhost('/usr/lib/%s/libgmp.so.10' % abi)
-		root.copyfromhost('/usr/lib/%s/libstdc++.so.6' % abi)
+    root.write('/etc/passwd',
+      'root:x:0:0:root:/:/bin/false\n' + \
+      'nobody:x:65534:65534:nobody:/nonexistent:/bin/false')
 
-		root.write('/etc/passwd',
-			'root:x:0:0:root:/:/bin/false\n' + \
-			'nobody:x:65534:65534:nobody:/nonexistent:/bin/false')
+    # Mountpoints for libraries
+    root.mkdir(RUBY_ROOT)
+    root.mkdir(PYTHON_ROOT)
+    root.mkdir(JAVA_ROOT)
+    root.mkdir(HASKELL_ROOT)
+    root.mkdir('/opt/nodejs/')
 
-		# Other miscellaneous mountpoints
-		root.mkdir('/dev/')
-		root.mkdir('/proc/')
-		root.mkdir('/home/')
-		root.mkdir('/sys/')
+    # Other miscellaneous mountpoints
+    root.mkdir('/dev/')
+    root.mkdir('/proc/')
+    root.mkdir('/home/')
+    root.mkdir('/sys/')
+    root.touch('/dev/stdout')
+    root.touch('/dev/stderr')
+    root.touch('/dev/stdin')
 
-	with Chroot(os.path.join(args.target, 'root'), '/', link=args.link) as root:
-		install_common(root)
+    root.symlink('/usr/bin/java',
+            [x for x in JAVA_FILES if  x.endswith('bin/java')][0])
+    root.symlink('/usr/bin/python', os.path.join(PYTHON_ROOT, 'python'))
+    for f in RUBY_FILES:
+        if f.startswith(RUBY_ROOT): continue
+        root.symlink(f, os.path.join(RUBY_ROOT, f.replace('/', '_')))
 
-		# /tmp is an (optional) mountpoint in the normal chroot, and
-		# will be left read-only for the programs that don't need it.
-		root.mkdir('/tmp/')
+  with Chroot(os.path.join(args.target, 'root'), '/', link=args.link) as root:
+    install_common(root)
 
-		# Mountpoints for libraries
-		root.mkdir('/usr/lib/ruby/')
-		root.mkdir('/usr/lib/python2.7/')
-		root.mkdir('/usr/lib/jvm/')
-		root.mkdir('/usr/lib/ghc/')
-		root.mkdir('/opt/nodejs/')
+    map(root.copyfromhost, resolver.files_for(ROOT_PACKAGES))
 
-		root.symlink('/usr/bin/node', '/opt/nodejs/bin/node')
-		if is_x86_64:
-			root.symlink('/usr/bin/java', '/usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java')
-		elif is_arm:
-			root.symlink('/usr/bin/java', '/usr/lib/jvm/java-8-openjdk-armhf/jre/bin/java')
-		root.symlink('/usr/lib/%s/libruby-2.1.so.2.1' % abi,
-				'/usr/lib/ruby/2.1.0/libruby-2.1.so.2.1')
-		root.symlink('/usr/bin/ruby', '/usr/lib/ruby/2.1.0/ruby')
-		root.symlink('/usr/bin/python', '/usr/lib/python2.7/python')
-		root.symlink('/usr/bin/ghc', '/usr/lib/ghc/lib/ghc')
+    # /tmp is an (optional) mountpoint in the normal chroot, and
+    # will be left read-only for the programs that don't need it.
+    root.mkdir('/tmp/')
 
-		root.install('/usr/bin/ldwrapper', os.path.join(args.target, 'bin/ldwrapper'))
-		root.install('/lib/libminijailpreload.so',
-				os.path.join(args.target, 'bin/libminijailpreload.so'))
-		root.install('/usr/bin/karel', '/usr/bin/karel')
+    root.install('/usr/bin/ldwrapper', os.path.join(args.target, 'bin/ldwrapper'))
+    root.install('/lib/libminijailpreload.so',
+        os.path.join(args.target, 'bin/libminijailpreload.so'))
+    root.install('/usr/bin/karel', '/usr/bin/karel')
 
-	with Chroot(os.path.join(args.target, 'root-compilers'), '/', link=args.link) as root:
-		install_common(root)
+  with Chroot(os.path.join(args.target, 'root-compilers'), '/', link=args.link) as root:
+    install_common(root)
 
-		root.copyfromhost('/usr/bin/gcc')
-		root.copyfromhost('/usr/bin/g++')
-		root.copyfromhost('/usr/bin/as')
-		root.copyfromhost('/usr/lib/libopcodes-2.*-system*.so')
-		root.copyfromhost('/usr/lib/libbfd-2.*-system*.so')
-		root.copyfromhost('/usr/bin/fpc')
-		root.copyfromhost('/usr/bin/ld')
-		root.copyfromhost('/usr/bin/ld.bfd')
-		if is_x86_64:
-			root.copyfromhost('/usr/bin/ppcx64')
-			root.copyfromhost('/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2')
-			root.copyfromhost('/usr/lib/x86_64-linux-gnu/libgfortran.so.3')
-			root.copyfromhost('/usr/lib/x86_64-linux-gnu/libitm.so.1')
-			root.copyfromhost('/usr/lib/x86_64-linux-gnu/libquadmath.so.0')
-			root.copyfromhost('/usr/lib/x86_64-linux-gnu/libtsan.so.0')
-		elif is_arm:
-			root.copyfromhost('/usr/bin/ppcarm')
-			root.copyfromhost('/lib/arm-linux-gnueabihf/ld-linux-armhf.so.3')
-			root.copyfromhost('/lib/arm-linux-gnueabihf/ld-linux.so.3')
+    for f in resolver.files_for(COMPILER_PACKAGES):
+        if os.path.islink(f):
+            root.symlink(f, os.readlink(f))
+        else:
+            root.copyfromhost(f)
 
-		root.copyfromhost('/usr/lib/gcc/%s/4.9' % abi)
-		root.symlink('/usr/lib/gcc/%s/ld' % abi, '/usr/bin/ld')
+    root.copyfromhost('/usr/bin/fpc')
+    root.copyfromhost('/usr/bin/ppcx64')
+    root.symlink('/usr/bin/javac',
+            [x for x in JAVA_FILES if  x.endswith('bin/javac')][0])
+    for f in HASKELL_FILES:
+        if f.startswith(HASKELL_ROOT): continue
+        root.symlink(f, os.path.join(HASKELL_ROOT, f.replace('/', '_')))
+    root.mkdir('/tmp/')
 
-		root.copyfromhost('/usr/lib/%s/crt1.o' % abi)
-		root.copyfromhost('/usr/lib/%s/crti.o' % abi)
-		root.copyfromhost('/usr/lib/%s/crtn.o' % abi)
-		root.copyfromhost('/usr/lib/%s/libasan.so.1' % abi)
-		root.copyfromhost('/usr/lib/%s/libatomic.so.1' % abi)
-		root.copyfromhost('/usr/lib/%s/libc.a' % abi)
-		root.copyfromhost('/usr/lib/%s/libc.so' % abi)
-		root.copyfromhost('/usr/lib/%s/libc_nonshared.a' % abi)
-		root.copyfromhost('/usr/lib/%s/libcloog-isl.so.4' % abi)
-		root.copyfromhost('/usr/lib/%s/libgomp.so.1' % abi)
-		root.copyfromhost('/usr/lib/%s/libisl.so.*' % abi)
-		root.copyfromhost('/usr/lib/%s/libm.a' % abi)
-		root.copyfromhost('/usr/lib/%s/libm.so' % abi)
-		root.copyfromhost('/usr/lib/%s/libmpc.so.3' % abi)
-		root.copyfromhost('/usr/lib/%s/libmpfr.so.4' % abi)
+    root.install('/usr/bin/kcl', '/usr/bin/kcl')
+    root.install('/usr/bin/ldwrapper', os.path.join(args.target, 'bin/ldwrapper'))
+    root.install('/lib/libminijailpreload.so',
+        os.path.join(args.target, 'bin/libminijailpreload.so'))
 
-		# For ghc
-		root.symlink('/usr/lib/%s/libgmp.so' % abi, 'libgmp.so.10')
-		root.symlink('/usr/lib/%s/librt.so' % abi, '/lib/%s/librt.so.1' % abi)
-		root.symlink('/usr/lib/%s/libdl.so' % abi, '/lib/%s/libdl.so.2' % abi)
-		root.copyfromhost('/usr/lib/%s/libffi.so' % abi)
-                if is_arm:
-                    # These dependencies are ARM-specific.
-                    root.copyfromhost('/usr/lib/%s/libLLVM-3.4.so.1' % abi)
-                    root.copyfromhost('/usr/lib/%s/libedit.so.2' % abi)
-                    root.copyfromhost('/usr/lib/llvm-3.4')
-                    root.symlink('/usr/bin/opt', '/usr/lib/llvm-3.4/bin/opt')
-                    root.symlink('/usr/bin/llc', '/usr/lib/llvm-3.4/bin/llc')
+  with Chroot(os.path.join(args.target, 'root-openjdk'), JAVA_ROOT, link=args.link) as root:
+    map(root.copyfromhost, JAVA_FILES)
 
-		root.copyfromhost('/usr/lib/fpc/')
+  with Chroot(os.path.join(args.target, 'root-python'), PYTHON_ROOT, link=args.link) as root:
+    root.install(os.path.join(PYTHON_ROOT, 'python'), '/usr/bin/python')
+    map(root.copyfromhost,
+            [x for x in PYTHON_FILES if x.startswith(PYTHON_ROOT)])
 
-		root.copyfromhost('/usr/include/')
+  with Chroot(os.path.join(args.target, 'root-ruby'), RUBY_ROOT, link=args.link) as root:
+    root.install(os.path.join(RUBY_ROOT, 'ruby'), '/usr/bin/ruby')
+    map(root.copyfromhost,
+            [x for x in RUBY_FILES if x.startswith(RUBY_ROOT)])
+    for f in RUBY_FILES:
+        if f.startswith(RUBY_ROOT): continue
+        root.install(os.path.join(RUBY_ROOT, f.replace('/', '_')), f)
 
-		root.write('/etc/passwd',
-				'root:x:0:0:root:/:/bin/false\n' + \
-				'nobody:x:65534:65534:nobody:/nonexistent:/bin/false')
-
-		# Mountpoints for libraries
-		root.mkdir('/usr/lib/ruby/')
-		root.mkdir('/usr/lib/python2.7/')
-		root.mkdir('/usr/lib/jvm/')
-		root.mkdir('/usr/lib/ghc/')
-		root.mkdir('/opt/nodejs/')
-
-		root.symlink('/usr/lib/%s/libruby-2.1.so.2.1' % abi,
-				'/usr/lib/ruby/2.1.0/libruby-2.1.so.2.1')
-		if is_x86_64:
-			root.symlink('/usr/bin/javac', '/usr/lib/jvm/java-8-openjdk-amd64/bin/javac')
-		elif is_arm:
-			root.symlink('/usr/bin/javac', '/usr/lib/jvm/java-8-openjdk-armhf/bin/javac')
-		root.symlink('/usr/bin/ruby', '/usr/lib/ruby/2.1.0/ruby')
-		root.symlink('/usr/bin/python', '/usr/lib/python2.7/python')
-		root.symlink('/usr/bin/ghc', '/usr/lib/ghc/lib/ghc')
-		root.symlink('/usr/lib/haskell-packages', '/usr/lib/ghc/haskell-packages')
-		root.symlink('/tmp', '/home')
-
-		root.install('/usr/bin/kcl', '/usr/bin/kcl')
-		root.install('/usr/bin/ldwrapper', os.path.join(args.target, 'bin/ldwrapper'))
-		root.install('/lib/libminijailpreload.so',
-				os.path.join(args.target, 'bin/libminijailpreload.so'))
-
-	with Chroot(os.path.join(args.target, 'root-openjdk'), '/usr/lib/jvm/', link=args.link) as root:
-		root.copyfromhost('/usr/lib/jvm')
-
-	with Chroot(os.path.join(args.target, 'root-python'), '/usr/lib/python2.7/', link=args.link) as root:
-		root.copyfromhost('/usr/lib/python2.7',
-				exclude=['/usr/lib/python2.7/dist-packages', '/usr/lib/python2.7/config-x86_64-linux-gnu'])
-		root.install('/usr/lib/python2.7/python', '/usr/bin/python')
-
-	with Chroot(os.path.join(args.target, 'root-ruby'), '/usr/lib/ruby/', link=args.link) as root:
-		root.copyfromhost('/usr/lib/ruby')
-		root.copyfromhost('/usr/lib/%s/ruby/' % abi,
-				relative_to='/usr/lib/%s/ruby/' % abi)
-		root.install('/usr/lib/ruby/2.1.0/libruby-2.1.so.2.1',
-				'/usr/lib/%s/libruby-2.1.so.2.1' % abi)
-		root.install('/usr/lib/ruby/2.1.0/ruby', '/usr/bin/ruby')
-
-	with Chroot(os.path.join(args.target, 'root-hs'), '/usr/lib/ghc/', link=args.link) as root:
-		root.copyfromhost('/usr/lib/ghc')
-		if os.path.exists('/usr/lib/haskell-packages/'):
-			root.copyfromhost('/usr/lib/haskell-packages/', relative_to='/usr/lib/')
+  with Chroot(os.path.join(args.target, 'root-hs'), HASKELL_ROOT, link=args.link) as root:
+    map(root.copyfromhost,
+            [x for x in HASKELL_FILES if x.startswith(HASKELL_ROOT)])
+    for f in HASKELL_FILES:
+        if f.startswith(HASKELL_ROOT): continue
+        root.install(os.path.join(HASKELL_ROOT, f.replace('/', '_')), f)
 
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description='Build a chroot environment for minijail')
-	parser.add_argument('--target', default='/var/lib/minijail',
-	                    help='The directory in which the chroot environment will '
-	                    'be built')
-	parser.add_argument('--no-link', dest='link', action='store_false',
-	                    help='Copy instead of linking files')
-	parser.add_argument('command', nargs=argparse.REMAINDER)
-	args = parser.parse_args()
-	sys.exit(main(args))
+  parser = argparse.ArgumentParser(description='Build a chroot environment for minijail')
+  parser.add_argument('--target', default='/var/lib/minijail',
+                      help='The directory in which the chroot environment will '
+                      'be built')
+  parser.add_argument('--no-link', dest='link', action='store_false',
+                      help='Copy instead of linking files')
+  parser.add_argument('command', nargs=argparse.REMAINDER)
+  args = parser.parse_args()
+  sys.exit(main(args))
+
+# vim: set expandtab:ts=2:sw=2
