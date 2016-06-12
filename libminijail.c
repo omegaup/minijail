@@ -1097,8 +1097,9 @@ int init(struct minijail *j, pid_t rootpid)
 			t1.tv_nsec -= t0.tv_nsec;
 		}
 		fprintf(j->meta_file,
-				"time:%ld\ntime-wall:%ld\nmem:%ld\n",
+				"time:%ld\ntime-sys:%ld\ntime-wall:%ld\nmem:%ld\n",
 				1000000 * usage.ru_utime.tv_sec + usage.ru_utime.tv_usec,
+				1000000 * usage.ru_stime.tv_sec + usage.ru_stime.tv_usec,
 				(1000000000L * t1.tv_sec + t1.tv_nsec) / 1000L,
 				usage.ru_maxrss * 1024);
 	}
