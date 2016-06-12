@@ -39,9 +39,10 @@ static void usage(const char *progn)
 {
 	size_t i;
 
-	printf("Usage: %s [-Ghinprsvt] [-b <src>,<dest>[,<writeable>]] "
+	printf("Usage: %s [-Ghinpqrsvt] [-b <src>,<dest>[,<writeable>]] "
 	       "[-c <caps>] [-C <dir>] [-g <group>] [-S <file>] [-u <user>] "
 	       "<program> [args...]\n"
+				 "  -q:         quiesces logging\n"
 	       "  -b:         binds <src> to <dest> in chroot. Multiple "
 	       "instances allowed\n"
 	       "  -C <dir>:   chroot to <dir>\n"
@@ -81,8 +82,11 @@ static int parse_args(struct minijail *j, int argc, char *argv[],
 	const char *filter_path;
 	if (argc > 1 && argv[1][0] != '-')
 		return 1;
-	while ((opt = getopt(argc, argv, "S:C:d:b:hHLt:I:w:k:O:m:M:0:1:2:Z")) != -1) {
+	while ((opt = getopt(argc, argv, "qS:C:d:b:hHLt:I:w:k:O:m:M:0:1:2:Z")) != -1) {
 		switch (opt) {
+		case 'q':
+			minijail_log_level(j, LOG_EMERG);
+			break;
 		case 's':
 			minijail_use_seccomp(j);
 			break;
