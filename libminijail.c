@@ -788,6 +788,46 @@ void drop_ugid(const struct minijail *j)
 		pdie("setresuid");
 }
 
+void redirect_stdio(const struct minijail *j)
+{
+	if (j->flags.redirect_stdin) {
+		int fd = open("/dev/stdin", O_RDONLY | O_NOFOLLOW);
+		if (fd == -1) {
+			pdie("open(stdin)");
+		}
+		if (fd != 0) {
+			if (dup2(fd, 0) != 0) {
+				pdie("dup2(stdin)");
+			}
+			close(fd);
+		}
+	}
+	if (j->flags.redirect_stdout) {
+		int fd = open("/dev/stdout", O_WRONLY | O_TRUNC | O_NOFOLLOW);
+		if (fd == -1) {
+			pdie("open(stdout)");
+		}
+		if (fd != 1) {
+			if (dup2(fd, 1) != 1) {
+				pdie("dup2(stdout)");
+			}
+			close(fd);
+		}
+	}
+	if (j->flags.redirect_stderr) {
+		int fd = open("/dev/stderr", O_WRONLY | O_TRUNC | O_NOFOLLOW);
+		if (fd == -1) {
+			pdie("open(stderr)");
+		}
+		if (fd != 2) {
+			if (dup2(fd, 2) != 2) {
+				pdie("dup2(stderr)");
+			}
+			close(fd);
+		}
+	}
+}
+
 /*
  * We specifically do not use cap_valid() as that only tells us the last
  * valid cap we were *compiled* against (i.e. what the version of kernel
@@ -979,42 +1019,6 @@ void API minijail_enter(const struct minijail *j)
 			close(fd);
 		}
 	}
-	if (j->flags.redirect_stdin) {
-		int fd = open("/dev/stdin", O_RDONLY | O_NOFOLLOW);
-		if (fd == -1) {
-			pdie("open(stdin)");
-		}
-		if (fd != 0) {
-			if (dup2(fd, 0) != 0) {
-				pdie("dup2(stdin)");
-			}
-			close(fd);
-		}
-	}
-	if (j->flags.redirect_stdout) {
-		int fd = open("/dev/stdout", O_WRONLY | O_TRUNC | O_NOFOLLOW);
-		if (fd == -1) {
-			pdie("open(stdout)");
-		}
-		if (fd != 1) {
-			if (dup2(fd, 1) != 1) {
-				pdie("dup2(stdout)");
-			}
-			close(fd);
-		}
-	}
-	if (j->flags.redirect_stderr) {
-		int fd = open("/dev/stderr", O_WRONLY | O_TRUNC | O_NOFOLLOW);
-		if (fd == -1) {
-			pdie("open(stderr)");
-		}
-		if (fd != 2) {
-			if (dup2(fd, 2) != 2) {
-				pdie("dup2(stderr)");
-			}
-			close(fd);
-		}
-	}
 
 	/*
 	 * If we're setting no_new_privs, we can drop privileges
@@ -1025,6 +1029,7 @@ void API minijail_enter(const struct minijail *j)
 		drop_ugid(j);
 		if (j->flags.caps)
 			drop_caps(j);
+		redirect_stdio(j);
 
 		set_seccomp_filter(j);
 	} else {
@@ -1040,6 +1045,7 @@ void API minijail_enter(const struct minijail *j)
 		drop_ugid(j);
 		if (j->flags.caps)
 			drop_caps(j);
+		redirect_stdio(j);
 	}
 
 	/*
@@ -1910,36 +1916,45 @@ void API minijail_close_all_files(struct minijail *j)
 
 int API minijail_redirect_stdin(struct minijail *j, const char *stdin_path)
 {
-	j->flags.redirect_stdin = 1;
 	int fd = open(stdin_path, O_RDONLY | O_NOFOLLOW);
-	if (fd== -1) {
+	if (fd == -1) {
 		perror("open(stdin)");
 		return -1;
 	}
 	close(fd);
-	return minijail_bind(j, stdin_path, "/dev/stdin", 0);
+	int rc = minijail_bind(j, stdin_path, "/dev/stdin", 0);
+	if (rc == 0) {
+		j->flags.redirect_stdin = 1;
+	}
+	return rc;
 }
 
 int API minijail_redirect_stdout(struct minijail *j, const char *stdout_path)
 {
-	j->flags.redirect_stdout = 1;
 	int fd = open(stdout_path, O_WRONLY | O_CREAT | O_NOFOLLOW, 0644);
 	if (fd == -1) {
 		perror("open(stdout)");
 		return -1;
 	}
 	close(fd);
-	return minijail_bind(j, stdout_path, "/dev/stdout", 1);
+	int rc = minijail_bind(j, stdout_path, "/dev/stdout", 1);
+	if (rc == 0) {
+		j->flags.redirect_stdout = 1;
+	}
+	return rc;
 }
 
 int API minijail_redirect_stderr(struct minijail *j, const char *stderr_path)
 {
-	j->flags.redirect_stderr = 1;
 	int fd = open(stderr_path, O_WRONLY | O_CREAT | O_NOFOLLOW, 0644);
 	if (fd == -1) {
 		perror("open(stderr)");
 		return -1;
 	}
 	close(fd);
-	return minijail_bind(j, stderr_path, "/dev/stderr", 1);
+	int rc = minijail_bind(j, stderr_path, "/dev/stderr", 1);
+	if (rc == 0) {
+		j->flags.redirect_stderr = 1;
+	}
+	return rc;
 }
