@@ -24,8 +24,9 @@ stat: 1
 unlink: 1
 write: 1
 
-# Time
+# System
 gettimeofday: 1
+sysinfo: 1
 
 # Signals
 rt_sigaction: 1

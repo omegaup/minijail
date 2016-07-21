@@ -11,6 +11,7 @@ fstat64: 1
 ftruncate64: 1
 getcwd: 1
 getdents64: 1
+getrandom: 1
 ioctl: return ENOSYS
 lseek: 1
 lstat64: 1
@@ -19,6 +20,7 @@ openat: 1
 pipe2: 1
 pipe: 1
 read: 1
+readlink: 1
 stat64: 1
 write: 1
 
@@ -33,8 +35,10 @@ getgid32: 1
 getrusage: 1
 getuid32: 1
 prctl: return EPERM
+prlimit64: arg2 != 0; return EPERM
 sched_getaffinity: 1
 ugetrlimit: 1
+sysinfo: 1
 
 # Time
 clock_gettime: 1

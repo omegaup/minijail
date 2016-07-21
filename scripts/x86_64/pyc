@@ -25,3 +25,4 @@ geteuid: 1
 getegid: 1
 ioctl: return ENOTTY
 rename: 1
+sysinfo: 1

@@ -40,6 +40,7 @@ execve: 1
 wait4: 1
 arch_prctl: 1
 ioctl: 1
+sysinfo: 1
 
 # Investigate
 fcntl: 1

@@ -14,6 +14,7 @@ getdents64: 1
 ioctl: return ENOTTY
 lseek: 1
 lstat: 1
+lstat64: 1
 open: 1
 read: 1
 readlink: 1
@@ -29,6 +30,7 @@ gettimeofday: 1
 getrusage: 1
 ARM_set_tls: 1
 prlimit64: arg1 == RLIMIT_STACK && arg2 != 0; return EPERM
+sysinfo: 1
 
 # Signals
 rt_sigaction: 1

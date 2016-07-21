@@ -29,6 +29,7 @@ chmod: 1
 mprotect: 1
 arch_prctl: 1
 fcntl: 1
+sysinfo: 1
 
 # fpc calls other compiler programs, and needs ld-wrapper
 execve: 1

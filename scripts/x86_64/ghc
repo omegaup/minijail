@@ -46,6 +46,7 @@ umask: 1
 chmod: 1
 getcwd: 1
 gettimeofday: 1
+sysinfo: 1
 
 mkdir: 1
 shmctl: 1

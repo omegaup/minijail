@@ -17,12 +17,13 @@ write: 1
 # arg1 == SNDCTL_TMR_TIMEBASE or SNDRV_TIMER_IOCTL_NEXT_DEVICE or TCGETS
 ioctl: 1
 
-# Time
+# System
 gettimeofday: 1
 clock_gettime: 1
 timer_create: 1
 timer_settime: 1
 timer_delete: 1
+sysinfo: 1
 
 # Memory
 brk: 1

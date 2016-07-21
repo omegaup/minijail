@@ -24,8 +24,9 @@ unlink: 1
 write: 1
 writev: 1
 
-# Time
+# System
 gettimeofday: 1
+sysinfo: 1
 
 # Memory
 brk: 1

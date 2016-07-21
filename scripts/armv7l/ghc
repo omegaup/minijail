@@ -8,16 +8,19 @@ access: 1
 chmod: 1
 close: 1
 dup2: 1
+fallocate: 1
 fcntl64: arg1 == F_GETFD || arg1 == F_GETFL || arg1 == F_SETFD || arg1 == F_SETFL
 fstat64: 1
 ftruncate64: 1
 getcwd: 1
+getdents64: 1
 ioctl: return ENOTTY
 lseek: 1
 lstat64: 1
 mkdir: 1
 open: 1
 read: 1
+readv: 1
 pread64: 1
 readlink: 1
 rmdir: 1
@@ -33,6 +36,8 @@ epoll_create: 1
 epoll_ctl: 1
 epoll_wait: 1
 eventfd2: 1
+poll: 1
+restart_syscall: 1
 
 # Environment
 getrusage: 1
@@ -40,6 +45,7 @@ getpid: 1
 prlimit64: arg0 == RLIMIT_STACK; return EPERM
 ugetrlimit: 1
 uname: 1
+sysinfo: 1
 
 # Signals
 pause: 1

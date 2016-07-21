@@ -34,6 +34,7 @@ sched_getaffinity: 1
 clock_gettime: 1
 prctl: return ENOSYS
 poll: 1
+getrandom: 1
 
 set_robust_list: 1
 

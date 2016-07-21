@@ -15,13 +15,14 @@ read: 1
 socket: return ENETDOWN
 write: 1
 
-# Time
-gettimeofday: 1
-clock_gettime: 1
+# Environment
 clock_getres: 1
+clock_gettime: 1
+gettimeofday: 1
+sysinfo: 1
 timer_create: 1
-timer_settime: 1
 timer_delete: 1
+timer_settime: 1
 
 # Memory
 brk: 1

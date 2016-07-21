@@ -25,6 +25,9 @@ class FileResolver:
     else:
       self.exclude_files = exclude_files[:]
 
+  def package_exists(self, package_name):
+    return package_name in self.apt_cache
+
   def files_for(self, package_names, exclude_packages=None, recursive=True,
       include=None, exclude_files=None):
     result = set()
@@ -88,6 +91,9 @@ class Chroot:
     assert path.startswith(root.rstrip('/')), '%s does not start with %s' % (path, root)
     return self.chroot + path[len(root)-1:]
 
+  def file_exists(self, path, relative_to=None):
+    return os.path.lexists(self.__chroot_path(path, relative_to))
+
   def mkdir(self, path, relative_to=None):
     path = os.path.join(self.chroot, os.path.relpath(self.__chroot_path(path, relative_to),
       self.chroot))
@@ -149,7 +155,9 @@ class Chroot:
       while os.path.islink(source):
         source = os.path.join(os.path.dirname(source),
           os.readlink(source))
-      if self.__link:
+      if os.path.isdir(source):
+        self.mkdir(path, relative_to)
+      elif self.__link:
         os.link(source, self.__chroot_path(path, relative_to))
       else:
         shutil.copy(source, self.__chroot_path(path, relative_to))
@@ -162,14 +170,13 @@ class Chroot:
     try:
       os.symlink(destination, self.__chroot_path(path))
     except Exception as e:
-      print>>sys.stderr, path, source
+      print>>sys.stderr, path, destination
       raise e
 
   def write(self, path, contents):
     self.mkdir(os.path.dirname(path))
-    f = open(self.__chroot_path(path), 'w')
-    f.write(contents)
-    f.close()
+    with open(self.__chroot_path(path), 'w') as f:
+      f.write(contents)
     os.utime(self.__chroot_path(path), (0, 0))
 
   def extract(self, archive, sha1, skipprefix, url, exclude=[]):
@@ -204,9 +211,18 @@ def main(args):
   ROOT_PACKAGES = ['libc6', 'libcap2', 'libexpat1','libtinfo5', 'zlib1g',
       'libffi6', 'libgmp10', 'libstdc++6', 'libreadline6', 'libssl1.0.0',
       'libyaml-0-2', 'libgdbm3', 'ca-certificates']
+  OPTIONAL_ROOT_PACKAGES = []
+  for package_name in OPTIONAL_ROOT_PACKAGES:
+    if resolver.package_exists(package_name):
+       ROOT_PACKAGES.append(package_name)
+
   COMPILER_PACKAGES = ROOT_PACKAGES + ['g++', 'gcc', 'libc6-dev', 'libgmp-dev',
-      'libbsd-dev', 'fp-compiler', 'libgfortran3', 'libitm1', 'libquadmath0',
-      'libtsan0', 'libffi-dev', 'binutils']
+      'libbsd-dev', 'fp-compiler', 'fp-units-fcl', 'libgfortran3', 'libffi-dev',
+      'binutils']
+  OPTIONAL_COMPILER_PACKAGES = ['libitm1', 'libquadmath0', 'libtsan0']
+  for package_name in OPTIONAL_COMPILER_PACKAGES:
+    if resolver.package_exists(package_name):
+       COMPILER_PACKAGES.append(package_name)
 
   RUBY_ROOT = '/usr/lib/ruby/'
   HASKELL_ROOT = '/usr/lib/ghc/'
@@ -276,12 +292,17 @@ def main(args):
             root.copyfromhost(f)
 
     root.copyfromhost('/usr/bin/fpc')
-    root.copyfromhost('/usr/bin/ppcx64')
+    if os.path.exists('/usr/bin/ppcarm'):
+      root.copyfromhost('/usr/bin/ppcarm')
+    else:
+      root.copyfromhost('/usr/bin/ppcx64')
     root.symlink('/usr/bin/javac',
             [x for x in JAVA_FILES if  x.endswith('bin/javac')][0])
     for f in HASKELL_FILES:
         if f.startswith(HASKELL_ROOT): continue
+        if root.file_exists(f): continue
         root.symlink(f, os.path.join(HASKELL_ROOT, f.replace('/', '_')))
+    root.symlink('/usr/lib/haskell-packages', os.path.join(HASKELL_ROOT, 'haskell-packages'))
     root.mkdir('/tmp/')
 
     root.install('/usr/bin/kcl', '/usr/bin/kcl')
@@ -311,6 +332,7 @@ def main(args):
     for f in HASKELL_FILES:
         if f.startswith(HASKELL_ROOT): continue
         root.install(os.path.join(HASKELL_ROOT, f.replace('/', '_')), f)
+    root.copyfromhost('/usr/lib/haskell-packages', relative_to='/usr/lib/')
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Build a chroot environment for minijail')
