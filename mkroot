@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 
 import apt
 import argparse
@@ -12,7 +12,7 @@ import stat
 import subprocess
 import sys
 import tarfile
-import urllib
+import urllib.request, urllib.parse, urllib.error
 
 # Class that enumerates all files installed by a certain Debian package.
 # Can work both recursively and non-recursively.
@@ -133,8 +133,8 @@ class Chroot:
             else:
               try:
                 self.install(filepath, abspath, relative_to)
-              except OSError, e:
-                print e, abspath, filepath
+              except OSError as e:
+                print(e, abspath, filepath)
           else:
             self.install(filepath, os.path.realpath(filepath), relative_to)
         for d in dirs:
@@ -162,7 +162,7 @@ class Chroot:
       else:
         shutil.copy(source, self.__chroot_path(path, relative_to))
     except Exception as e:
-      print>>sys.stderr, path, source
+      print(path, source, file=sys.stderr)
       raise e
 
   def symlink(self, path, destination):
@@ -170,7 +170,7 @@ class Chroot:
     try:
       os.symlink(destination, self.__chroot_path(path))
     except Exception as e:
-      print>>sys.stderr, path, destination
+      print(path, destination, file=sys.stderr)
       raise e
 
   def write(self, path, contents):
@@ -181,7 +181,7 @@ class Chroot:
 
   def extract(self, archive, sha1, skipprefix, url, exclude=[]):
     if not os.path.exists(archive):
-      urllib.urlretrieve(url, archive)
+      urllib.request.urlretrieve(url, archive)
     with open(archive, 'rb') as f:
       assert(sha1 == hashlib.sha1(f.read()).hexdigest())
     with tarfile.open(archive) as tar:
@@ -271,7 +271,8 @@ def main(args):
   with Chroot(os.path.join(args.target, 'root'), '/', link=args.link) as root:
     install_common(root)
 
-    map(root.copyfromhost, resolver.files_for(ROOT_PACKAGES))
+    for filename in resolver.files_for(ROOT_PACKAGES):
+        root.copyfromhost(filename)
 
     # /tmp is an (optional) mountpoint in the normal chroot, and
     # will be left read-only for the programs that don't need it.
@@ -311,24 +312,28 @@ def main(args):
         os.path.join(args.target, 'bin/libminijailpreload.so'))
 
   with Chroot(os.path.join(args.target, 'root-openjdk'), JAVA_ROOT, link=args.link) as root:
-    map(root.copyfromhost, JAVA_FILES)
+    for filename in JAVA_FILES:
+        root.copyfromhost(filename)
 
   with Chroot(os.path.join(args.target, 'root-python'), PYTHON_ROOT, link=args.link) as root:
     root.install(os.path.join(PYTHON_ROOT, 'python'), '/usr/bin/python')
-    map(root.copyfromhost,
-            [x for x in PYTHON_FILES if x.startswith(PYTHON_ROOT)])
+    for filename in PYTHON_FILES:
+        if filename.startswith(PYTHON_ROOT):
+            root.copyfromhost(filename)
 
   with Chroot(os.path.join(args.target, 'root-ruby'), RUBY_ROOT, link=args.link) as root:
     root.install(os.path.join(RUBY_ROOT, 'ruby'), '/usr/bin/ruby')
-    map(root.copyfromhost,
-            [x for x in RUBY_FILES if x.startswith(RUBY_ROOT)])
+    for filename in RUBY_FILES:
+        if filename.startswith(RUBY_ROOT):
+            root.copyfromhost(filename)
     for f in RUBY_FILES:
         if f.startswith(RUBY_ROOT): continue
         root.install(os.path.join(RUBY_ROOT, f.replace('/', '_')), f)
 
   with Chroot(os.path.join(args.target, 'root-hs'), HASKELL_ROOT, link=args.link) as root:
-    map(root.copyfromhost,
-            [x for x in HASKELL_FILES if x.startswith(HASKELL_ROOT)])
+    for filename in HASKELL_FILES:
+        if filename.startswith(HASKELL_ROOT):
+            root.copyfromhost(filename)
     for f in HASKELL_FILES:
         if f.startswith(HASKELL_ROOT): continue
         root.install(os.path.join(HASKELL_ROOT, f.replace('/', '_')), f)
