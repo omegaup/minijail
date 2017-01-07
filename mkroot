@@ -82,7 +82,7 @@ class Chroot:
       self.mountpoint += '/'
     if os.path.exists(path):
       shutil.rmtree(path, True)
-    os.mkdir(path)
+    os.makedirs(path)
 
   def __chroot_path(self, path, relative_to=None):
     root = relative_to
@@ -293,6 +293,7 @@ def main(args):
             root.copyfromhost(f)
 
     root.copyfromhost('/usr/bin/fpc')
+    root.copyfromhost('/etc/fpc.cfg')
     if os.path.exists('/usr/bin/ppcarm'):
       root.copyfromhost('/usr/bin/ppcarm')
     else:
