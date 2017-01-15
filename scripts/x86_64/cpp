@@ -23,6 +23,7 @@ mmap: 1
 mremap: 1
 munmap: 1
 mprotect: 1
+sysinfo: return ENOSYS
 
 # Time
 clock_gettime: 1
