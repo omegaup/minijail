@@ -210,7 +210,7 @@ def main(args):
 
   ROOT_PACKAGES = ['libc6', 'libcap2', 'libexpat1','libtinfo5', 'zlib1g',
       'libffi6', 'libgmp10', 'libstdc++6', 'libreadline6', 'libssl1.0.0',
-      'libyaml-0-2', 'libgdbm3', 'ca-certificates']
+      'libyaml-0-2', 'libgdbm3', 'ca-certificates', 'lua5.2']
   OPTIONAL_ROOT_PACKAGES = []
   for package_name in OPTIONAL_ROOT_PACKAGES:
     if resolver.package_exists(package_name):
@@ -262,7 +262,7 @@ def main(args):
     root.touch('/dev/stdin')
 
     root.symlink('/usr/bin/java',
-            [x for x in JAVA_FILES if  x.endswith('bin/java')][0])
+            [x for x in JAVA_FILES if x.endswith('bin/java')][0])
     root.symlink('/usr/bin/python', os.path.join(PYTHON_ROOT, 'python'))
     for f in RUBY_FILES:
         if f.startswith(RUBY_ROOT): continue
@@ -282,6 +282,7 @@ def main(args):
     root.install('/lib/libminijailpreload.so',
         os.path.join(args.target, 'bin/libminijailpreload.so'))
     root.install('/usr/bin/karel', '/usr/bin/karel')
+    root.symlink('/usr/bin/lua', 'lua5.2')
 
   with Chroot(os.path.join(args.target, 'root-compilers'), '/', link=args.link) as root:
     install_common(root)
@@ -311,6 +312,7 @@ def main(args):
     root.install('/usr/bin/ldwrapper', os.path.join(args.target, 'bin/ldwrapper'))
     root.install('/lib/libminijailpreload.so',
         os.path.join(args.target, 'bin/libminijailpreload.so'))
+    root.symlink('/usr/bin/luac', 'luac5.2')
 
   with Chroot(os.path.join(args.target, 'root-openjdk'), JAVA_ROOT, link=args.link) as root:
     for filename in JAVA_FILES:

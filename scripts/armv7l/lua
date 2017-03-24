@@ -1,0 +1,20 @@
+# Exit
+exit: 1
+exit_group: 1
+
+# I/O
+close: 1
+dup3: 1
+fstat64: 1
+lseek: 1
+open: 1
+read: 1
+write: 1
+
+# Memory
+brk: 1
+mmap: 1
+
+# abort()
+rt_sigaction: arg0 != SIGSYS
+
