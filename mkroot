@@ -263,8 +263,7 @@ def main(args):
     root.touch('/dev/stdin')
 
     # Node.js really wants a source of randomness.
-    random.seed(9876543210)
-    root.write('/dev/urandom', bytes(random.randint(0, 255) for _ in range(4096)))
+    root.symlink('/dev/urandom', '/opt/nodejs/urandom')
 
     root.symlink('/usr/bin/java',
             [x for x in JAVA_FILES if x.endswith('bin/java')][0])
