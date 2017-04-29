@@ -7,6 +7,7 @@ import hashlib
 import os
 import os.path
 import platform
+import random
 import shutil
 import stat
 import subprocess
@@ -175,7 +176,7 @@ class Chroot:
 
   def write(self, path, contents):
     self.mkdir(os.path.dirname(path))
-    with open(self.__chroot_path(path), 'w') as f:
+    with open(self.__chroot_path(path), 'wb') as f:
       f.write(contents)
     os.utime(self.__chroot_path(path), (0, 0))
 
@@ -242,8 +243,8 @@ def main(args):
     root.copyfromhost('/etc/localtime')
 
     root.write('/etc/passwd',
-      'root:x:0:0:root:/:/bin/false\n' + \
-      'nobody:x:65534:65534:nobody:/nonexistent:/bin/false')
+      b'root:x:0:0:root:/:/bin/false\n'
+      b'nobody:x:65534:65534:nobody:/nonexistent:/bin/false')
 
     # Mountpoints for libraries
     root.mkdir(RUBY_ROOT)
@@ -261,9 +262,15 @@ def main(args):
     root.touch('/dev/stderr')
     root.touch('/dev/stdin')
 
+    # Node.js really wants a source of randomness.
+    random.seed(9876543210)
+    root.write('/dev/urandom', bytes(random.randint(0, 255) for _ in range(4096)))
+
     root.symlink('/usr/bin/java',
             [x for x in JAVA_FILES if x.endswith('bin/java')][0])
     root.symlink('/usr/bin/python', os.path.join(PYTHON_ROOT, 'python'))
+    root.symlink('/usr/bin/node', '/opt/nodejs/node')
+    root.symlink('/usr/lib/node_modules', '/opt/nodejs/node_modules')
     for f in RUBY_FILES:
         if f.startswith(RUBY_ROOT): continue
         root.symlink(f, os.path.join(RUBY_ROOT, f.replace('/', '_')))
@@ -281,7 +288,6 @@ def main(args):
     root.install('/usr/bin/ldwrapper', os.path.join(args.target, 'bin/ldwrapper'))
     root.install('/lib/libminijailpreload.so',
         os.path.join(args.target, 'bin/libminijailpreload.so'))
-    root.install('/usr/bin/karel', '/usr/bin/karel')
     root.symlink('/usr/bin/lua', 'lua5.2')
 
   with Chroot(os.path.join(args.target, 'root-compilers'), '/', link=args.link) as root:
@@ -308,7 +314,6 @@ def main(args):
     root.symlink('/usr/lib/haskell-packages', os.path.join(HASKELL_ROOT, 'haskell-packages'))
     root.mkdir('/tmp/')
 
-    root.install('/usr/bin/kcl', '/usr/bin/kcl')
     root.install('/usr/bin/ldwrapper', os.path.join(args.target, 'bin/ldwrapper'))
     root.install('/lib/libminijailpreload.so',
         os.path.join(args.target, 'bin/libminijailpreload.so'))
@@ -319,7 +324,7 @@ def main(args):
         root.copyfromhost(filename)
 
   with Chroot(os.path.join(args.target, 'root-python'), PYTHON_ROOT, link=args.link) as root:
-    root.install(os.path.join(PYTHON_ROOT, 'python'), '/usr/bin/python')
+    root.install(os.path.join(PYTHON_ROOT, 'python'), '/usr/bin/python2.7')
     for filename in PYTHON_FILES:
         if filename.startswith(PYTHON_ROOT):
             root.copyfromhost(filename)

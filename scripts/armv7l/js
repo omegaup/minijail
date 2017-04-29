@@ -1,40 +1,43 @@
-shmctl: 1
+ARM_cacheflush: 1
+futex: 1
+read: 1
 write: 1
+pread64: 1
+pwrite64: 1
 exit_group: 1
 brk: 1
-mmap: 1
+mmap2: 1
 munmap: 1
 open: 1
 close: 1
-read: 1
-fstat: 1
-writev: 1
+fstat64: 1
+stat64: 1
+lstat64: 1
 set_robust_list: 1
-futex: 1
-getrlimit: 1
+prlimit64: return EPERM
 readlink: 1
 getcwd: 1
-lstat: 1
-rt_sigreturn: 1
+getuid32: 1
+geteuid32: 1
+getgid32: 1
+getegid32: 1
 uname: 1
 madvise: 1
 exit: 1
-ioctl: return ENOTTY
+ioctl: arg1 == FIOCLEX || arg1 == TCGETS
 
 clock_gettime: 1
+clock_getres: 1
+pipe: 1
 pipe2: 1
 epoll_create1: 1
+poll: 1
 eventfd2: 1
-nanosleep: 1
-epoll_ctl: 1
-epoll_wait: 1
-sched_yield: 1
-stat: 1
 clone: 1
+rt_sigreturn: 1
+# TODO(lhchavez): Try to block re-routing SIGSYS.
 rt_sigaction: 1
 rt_sigprocmask: 1
-gettid: 1
 mprotect: 1
 
-# Investigate
-prctl: 1
+prctl: arg0 == PR_SET_NAME
