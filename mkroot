@@ -328,6 +328,10 @@ def main(args):
         if filename.startswith(PYTHON_ROOT):
             root.copyfromhost(filename)
 
+    with urllib.request.urlopen(
+            'https://raw.githubusercontent.com/omegaup/karel.js/master/libkarel/libkarel.py') as f:
+        root.write('/usr/lib/python2.7/libkarel.py', f.read())
+
   with Chroot(os.path.join(args.target, 'root-ruby'), RUBY_ROOT, link=args.link) as root:
     root.install(os.path.join(RUBY_ROOT, 'ruby'), '/usr/bin/ruby')
     for filename in RUBY_FILES:
