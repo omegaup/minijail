@@ -79,7 +79,7 @@ static int parse_args(struct minijail *j, int argc, char *argv[],
 	int opt;
 	int use_seccomp_filter = 0;
 	const size_t path_max = 4096;
-	const char *filter_path;
+	char *filter_path = NULL;
 	if (argc > 1 && argv[1][0] != '-')
 		return 1;
 	while ((opt = getopt(argc, argv, "qS:C:d:b:hHLt:I:w:k:O:m:M:0:1:2:Z")) != -1) {
@@ -96,6 +96,10 @@ static int parse_args(struct minijail *j, int argc, char *argv[],
 				fprintf(stderr,
 					"Filter path is too long.\n");
 				exit(1);
+			}
+			if (filter_path) {
+				free(filter_path);
+				filter_path = NULL;
 			}
 			filter_path = strndup(optarg, path_max);
 			if (!filter_path) {
