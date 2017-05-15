@@ -26,6 +26,7 @@ uname: 1
 madvise: 1
 exit: 1
 ioctl: arg1 == FIOCLEX || arg1 == TCGETS
+gettimeofday: 1
 
 clock_gettime: 1
 clock_getres: 1
