@@ -174,6 +174,15 @@ class Chroot:
       print(path, destination, file=sys.stderr)
       raise e
 
+  def mknod(self, path, mode=0o600, device=0, *, dir_fd=None):
+    self.mkdir(os.path.dirname(path))
+    try:
+      os.mknod(self.__chroot_path(path), mode=mode, device=device, dir_fd=dir_fd)
+      os.chmod(self.__chroot_path(path), mode&0o777)
+    except Exception as e:
+      print(path, destination, file=sys.stderr)
+      raise e
+
   def write(self, path, contents):
     self.mkdir(os.path.dirname(path))
     with open(self.__chroot_path(path), 'wb') as f:
@@ -211,7 +220,8 @@ def main(args):
 
   ROOT_PACKAGES = ['libc6', 'libcap2', 'libexpat1','libtinfo5', 'zlib1g',
       'libffi6', 'libgmp10', 'libstdc++6', 'libreadline6', 'libssl1.0.0',
-      'libyaml-0-2', 'libgdbm3', 'ca-certificates', 'lua5.2']
+      'libyaml-0-2', 'libgdbm3', 'ca-certificates', 'lua5.2', 'libicu55',
+      'libuuid1', 'liblzma5', 'libunwind8']
   OPTIONAL_ROOT_PACKAGES = []
   for package_name in OPTIONAL_ROOT_PACKAGES:
     if resolver.package_exists(package_name):
@@ -229,12 +239,21 @@ def main(args):
   HASKELL_ROOT = '/usr/lib/ghc/'
   PYTHON_ROOT = '/usr/lib/python2.7/'
   JAVA_ROOT = '/usr/lib/jvm/'
+  DOTNET_ROOT = '/usr/share/dotnet/'
 
   RUBY_FILES = resolver.files_for('ruby', exclude_packages=COMPILER_PACKAGES)
   PYTHON_FILES = resolver.files_for('python2.7')
   HASKELL_FILES = resolver.files_for('ghc', exclude_packages=COMPILER_PACKAGES)
   JAVA_FILES = resolver.files_for(['openjdk-8-jdk', 'openjdk-8-jre',
       'openjdk-8-jre-headless', 'openjdk-8-jdk-headless'], recursive=False, exclude_files=['/etc'])
+  # |resolver| excludes files from /usr/shared. All the dotnet files are in
+  # that directory, so we need a new resolver that does not exclude those
+  # files.
+  raw_resolver = FileResolver(exclude_files=())
+  DOTNET_FILES = raw_resolver.files_for(['dotnet-dev-1.0.4', 'dotnet-host',
+      'dotnet-hostfxr-1.0.1', 'dotnet-hostfxr-1.1.0',
+      'dotnet-sharedframework-microsoft.netcore.app-1.0.5',
+      'dotnet-sharedframework-microsoft.netcore.app-1.1.2'], recursive=False)
 
   def install_common(root):
     if not os.path.exists('/usr/lib/locale/locale-archive'):
@@ -251,6 +270,7 @@ def main(args):
     root.mkdir(PYTHON_ROOT)
     root.mkdir(JAVA_ROOT)
     root.mkdir(HASKELL_ROOT)
+    root.mkdir(DOTNET_ROOT)
     root.mkdir('/opt/nodejs/')
 
     # Other miscellaneous mountpoints
@@ -264,6 +284,9 @@ def main(args):
 
     # Node.js really wants a source of randomness.
     root.symlink('/dev/urandom', '/opt/nodejs/urandom')
+
+    # Device nodes
+    root.mknod('/dev/zero', mode=0o666|stat.S_IFCHR, device=os.makedev(1, 5))
 
     root.symlink('/usr/bin/java',
             [x for x in JAVA_FILES if x.endswith('bin/java')][0])
@@ -349,6 +372,15 @@ def main(args):
         if f.startswith(HASKELL_ROOT): continue
         root.install(os.path.join(HASKELL_ROOT, f.replace('/', '_')), f)
     root.copyfromhost('/usr/lib/haskell-packages', relative_to='/usr/lib/')
+
+  with Chroot(os.path.join(args.target, 'root-dotnet'), DOTNET_ROOT, link=args.link) as root:
+    for filename in DOTNET_FILES:
+        if filename.startswith(DOTNET_ROOT):
+            root.copyfromhost(filename)
+    root.copyfromhost('/usr/share/dotnet/ref', relative_to=DOTNET_ROOT)
+    root.copyfromhost('/usr/share/dotnet/Release.rsp', relative_to=DOTNET_ROOT)
+    root.write('/usr/share/dotnet/Main.runtimeconfig.json',
+               b'{"runtimeOptions": {"framework":{"name":"Microsoft.NETCore.App","version":"1.1.2"}}}')
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Build a chroot environment for minijail')
