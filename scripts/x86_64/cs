@@ -48,14 +48,16 @@ set_tid_address: 1
 
 # system
 arch_prctl: arg0 == ARCH_SET_FS
+clock_gettime: 1
 getegid: 1
 geteuid: 1
 getgid: 1
 getrlimit: 1
 getsid: 1
 gettid: 1
+gettimeofday: 1
 getuid: 1
+ioctl: return ENOSYS
 setrlimit: return EPERM
 socket: return ENETDOWN
 sysinfo: return ENOSYS
-ioctl: return ENOSYS

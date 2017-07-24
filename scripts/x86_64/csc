@@ -50,6 +50,7 @@ set_tid_address: 1
 
 # system
 arch_prctl: arg0 == ARCH_SET_FS
+clock_gettime: 1
 getegid: 1
 geteuid: 1
 getgid: 1
@@ -57,6 +58,7 @@ getrlimit: 1
 getrusage: 1
 getsid: 1
 gettid: 1
+gettimeofday: 1
 getuid: 1
 setrlimit: return EPERM
 socket: return ENETDOWN
