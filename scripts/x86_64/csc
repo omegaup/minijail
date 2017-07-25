@@ -1,4 +1,5 @@
 # exit
+exit: 1
 exit_group: 1
 
 # I/O
@@ -25,6 +26,7 @@ write: 1
 
 # memory
 brk: 1
+madvise: 1
 membarrier: 1
 mincore: 1
 mlock: 1

@@ -1,5 +1,7 @@
 # exit
+exit: 1
 exit_group: 1
+tgkill: arg0 == 2
 
 # I/O
 access: 1
@@ -25,10 +27,13 @@ write: 1
 
 # memory
 brk: 1
+madvise: 1
 membarrier: 1
+mincore: 1
 mlock: 1
 mmap: 1
 mprotect: 1
+msync: 1
 munmap: 1
 
 # threads
