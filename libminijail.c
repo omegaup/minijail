@@ -867,14 +867,16 @@ static int seccomp_should_parse_filters(struct minijail *j)
 	return 1;
 }
 
-static int parse_seccomp_filters(struct minijail *j, FILE *policy_file)
+static int parse_seccomp_filters(struct minijail *j, const char *filename,
+				 FILE *policy_file)
 {
 	struct sock_fprog *fprog = malloc(sizeof(struct sock_fprog));
 	int use_ret_trap =
 	    j->flags.seccomp_filter_tsync || j->flags.seccomp_filter_logging;
 	int allow_logging = j->flags.seccomp_filter_logging;
 
-	if (compile_filter(policy_file, fprog, use_ret_trap, allow_logging)) {
+	if (compile_filter(filename, policy_file, fprog, use_ret_trap,
+			   allow_logging)) {
 		free(fprog);
 		return -1;
 	}
@@ -894,7 +896,7 @@ void API minijail_parse_seccomp_filters(struct minijail *j, const char *path)
 		pdie("failed to open seccomp filter file '%s'", path);
 	}
 
-	if (parse_seccomp_filters(j, file) != 0) {
+	if (parse_seccomp_filters(j, path, file) != 0) {
 		die("failed to compile seccomp filter BPF program in '%s'",
 		    path);
 	}
@@ -911,7 +913,17 @@ void API minijail_parse_seccomp_filters_from_fd(struct minijail *j, int fd)
 		pdie("failed to associate stream with fd %d", fd);
 	}
 
-	if (parse_seccomp_filters(j, file) != 0) {
+	char fd_path[PATH_MAX], path[PATH_MAX] = {};
+	int ret = snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
+	if (ret == -1)
+		pdie("failed to create path for fd %d", fd);
+	ssize_t len = readlink(fd_path, path, sizeof(path));
+	if (len == -1) {
+		pwarn("failed to get path of fd %d", fd);
+		strncpy(path, "<fd>", sizeof(path));
+	}
+
+	if (parse_seccomp_filters(j, path, file) != 0) {
 		die("failed to compile seccomp filter BPF program from fd %d",
 		    fd);
 	}
