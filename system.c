@@ -51,7 +51,7 @@
 _Static_assert(SECURE_ALL_BITS == 0x55, "SECURE_ALL_BITS == 0x55.");
 #endif
 
-int lock_securebits(uint64_t skip_mask)
+int lock_securebits(const struct logger *logger, uint64_t skip_mask)
 {
 	/*
 	 * Ambient capabilities can only be raised if they're already present
@@ -66,14 +66,15 @@ int lock_securebits(uint64_t skip_mask)
 	}
 	int securebits_ret = prctl(PR_SET_SECUREBITS, securebits);
 	if (securebits_ret < 0) {
-		pwarn("prctl(PR_SET_SECUREBITS) failed");
+		pwarn(logger, "prctl(PR_SET_SECUREBITS) failed");
 		return -1;
 	}
 
 	return 0;
 }
 
-int write_proc_file(pid_t pid, const char *content, const char *basename)
+int write_proc_file(const struct logger *logger, pid_t pid, const char *content,
+		    const char *basename)
 {
 	int fd, ret;
 	size_t sz, len;
@@ -83,25 +84,26 @@ int write_proc_file(pid_t pid, const char *content, const char *basename)
 	sz = sizeof(filename);
 	ret = snprintf(filename, sz, "/proc/%d/%s", pid, basename);
 	if (ret < 0 || (size_t)ret >= sz) {
-		warn("failed to generate %s filename", basename);
+		warn(logger, "failed to generate %s filename", basename);
 		return -1;
 	}
 
 	fd = open(filename, O_WRONLY | O_CLOEXEC);
 	if (fd < 0) {
-		pwarn("failed to open '%s'", filename);
+		pwarn(logger, "failed to open '%s'", filename);
 		return -errno;
 	}
 
 	len = strlen(content);
 	written = write(fd, content, len);
 	if (written < 0) {
-		pwarn("failed to write '%s'", filename);
+		pwarn(logger, "failed to write '%s'", filename);
 		return -1;
 	}
 
 	if ((size_t)written < len) {
-		warn("failed to write %zu bytes to '%s'", len, filename);
+		warn(logger, "failed to write %zu bytes to '%s'", len,
+		     filename);
 		return -1;
 	}
 	close(fd);
@@ -118,7 +120,7 @@ int write_proc_file(pid_t pid, const char *content, const char *basename)
  * guaranteed to be able to access '/proc/sys/kernel/cap_last_cap' so we
  * programmatically find the value by calling prctl(PR_CAPBSET_READ).
  */
-unsigned int get_last_valid_cap(void)
+unsigned int get_last_valid_cap(const struct logger *logger)
 {
 	unsigned int last_valid_cap = 0;
 	if (is_android()) {
@@ -134,7 +136,7 @@ unsigned int get_last_valid_cap(void)
 		const char cap_file[] = "/proc/sys/kernel/cap_last_cap";
 		FILE *fp = fopen(cap_file, "re");
 		if (fscanf(fp, "%u", &last_valid_cap) != 1)
-			pdie("fscanf(%s)", cap_file);
+			pdie(logger, "fscanf(%s)", cap_file);
 		fclose(fp);
 	}
 	return last_valid_cap;
@@ -146,7 +148,7 @@ int cap_ambient_supported(void)
 	       0;
 }
 
-int config_net_loopback(void)
+int config_net_loopback(const struct logger *logger)
 {
 	const char ifname[] = "lo";
 	int sock;
@@ -157,7 +159,7 @@ int config_net_loopback(void)
 
 	sock = socket(AF_LOCAL, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 	if (sock < 0) {
-		pwarn("socket(AF_LOCAL) failed");
+		pwarn(logger, "socket(AF_LOCAL) failed");
 		return -1;
 	}
 
@@ -167,14 +169,14 @@ int config_net_loopback(void)
 	 */
 	strcpy(ifr.ifr_name, ifname);
 	if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0) {
-		pwarn("ioctl(SIOCGIFFLAGS) failed");
+		pwarn(logger, "ioctl(SIOCGIFFLAGS) failed");
 		return -1;
 	}
 
 	/* The kernel preserves ifr.ifr_name for use. */
 	ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
 	if (ioctl(sock, SIOCSIFFLAGS, &ifr) < 0) {
-		pwarn("ioctl(SIOCSIFFLAGS) failed");
+		pwarn(logger, "ioctl(SIOCSIFFLAGS) failed");
 		return -1;
 	}
 
@@ -201,21 +203,21 @@ int setup_and_dupe_pipe_end(int fds[2], size_t index, int fd)
 	return dup2(fds[index], fd);
 }
 
-int write_pid_to_path(pid_t pid, const char *path)
+int write_pid_to_path(const struct logger *logger, pid_t pid, const char *path)
 {
 	FILE *fp = fopen(path, "we");
 
 	if (!fp) {
-		pwarn("failed to open '%s'", path);
+		pwarn(logger, "failed to open '%s'", path);
 		return -errno;
 	}
 	if (fprintf(fp, "%d\n", (int)pid) < 0) {
 		/* fprintf(3) does not set errno on failure. */
-		warn("fprintf(%s) failed", path);
+		warn(logger, "fprintf(%s) failed", path);
 		return -1;
 	}
 	if (fclose(fp)) {
-		pwarn("fclose(%s) failed", path);
+		pwarn(logger, "fclose(%s) failed", path);
 		return -errno;
 	}
 

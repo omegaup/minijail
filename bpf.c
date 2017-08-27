@@ -201,8 +201,8 @@ void dump_bpf_prog(struct sock_fprog *fprog)
 	dump_bpf_filter(filter, len);
 }
 
-int bpf_resolve_jumps(struct bpf_labels *labels, struct sock_filter *filter,
-		      size_t len)
+int bpf_resolve_jumps(const struct logger *logger, struct bpf_labels *labels,
+		      struct sock_filter *filter, size_t len)
 {
 	struct sock_filter *instr;
 	size_t i, offset;
@@ -222,11 +222,12 @@ int bpf_resolve_jumps(struct bpf_labels *labels, struct sock_filter *filter,
 		switch ((instr->jt << 8) | instr->jf) {
 		case (JUMP_JT << 8) | JUMP_JF:
 			if (instr->k >= labels->count) {
-				warn("nonexistent label id: %u", instr->k);
+				warn(logger, "nonexistent label id: %u",
+				     instr->k);
 				return -1;
 			}
 			if (labels->labels[instr->k].location == 0xffffffff) {
-				warn("unresolved label: '%s'",
+				warn(logger, "unresolved label: '%s'",
 				     labels->labels[instr->k].label);
 				return -1;
 			}
@@ -237,7 +238,7 @@ int bpf_resolve_jumps(struct bpf_labels *labels, struct sock_filter *filter,
 			continue;
 		case (LABEL_JT << 8) | LABEL_JF:
 			if (labels->labels[instr->k].location != 0xffffffff) {
-				warn("duplicate label: '%s'",
+				warn(logger, "duplicate label: '%s'",
 				     labels->labels[instr->k].label);
 				return -1;
 			}

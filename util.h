@@ -9,6 +9,7 @@
 #ifndef _UTIL_H_
 #define _UTIL_H_
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <syslog.h>
@@ -19,28 +20,51 @@ extern "C" {
 #endif
 
 /* clang-format off */
-#define die(_msg, ...) do { \
-	syslog(LOG_ERR, "libminijail[%d]: " _msg, getpid(), ## __VA_ARGS__); \
+#define die(_logger, _msg, ...) do { \
+	do_log(_logger, LOG_ERR, "libminijail[%d]: " _msg, getpid(), ## __VA_ARGS__); \
 	abort(); \
 } while (0)
 
-#define pdie(_msg, ...) \
-	die(_msg ": %m", ## __VA_ARGS__)
+#define pdie(_logger, _msg, ...) \
+	die(_logger, _msg ": %m", ## __VA_ARGS__)
 
-#define warn(_msg, ...) \
-	syslog(LOG_WARNING, "libminijail[%d]: " _msg, getpid(), ## __VA_ARGS__)
+#define warn(_logger, _msg, ...) \
+	do_log(_logger, LOG_WARNING, "libminijail[%d]: " _msg, getpid(), ## __VA_ARGS__)
 
-#define pwarn(_msg, ...) \
-	warn(_msg ": %m", ## __VA_ARGS__)
+#define pwarn(_logger, _msg, ...) \
+	warn(_logger, _msg ": %m", ## __VA_ARGS__)
 
-#define info(_msg, ...) \
-	syslog(LOG_INFO, "libminijail[%d]: " _msg, getpid(), ## __VA_ARGS__)
+#define info(_logger, _msg, ...) \
+	do_log(_logger, LOG_INFO, "libminijail[%d]: " _msg, getpid(), ## __VA_ARGS__)
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 /* clang-format on */
 
+enum logger_system_t {
+	/* Log to syslog. This is the default. */
+	LOG_TO_SYSLOG = 0,
+
+	/* Log to a file descriptor. */
+	LOG_TO_FD,
+};
+
+struct logger {
+	/* The logging subsystem to use. The default is syslog. */
+	enum logger_system_t logger;
+
+	/* File descriptor to log to. Only used when logger is LOG_TO_FD. */
+	int fd;
+
+	/* Minimum priority to log. Only used when logger is LOG_TO_FD. */
+	int min_priority;
+};
+
 extern const char *log_syscalls[];
 extern const size_t log_syscalls_len;
+
+extern void do_log(const struct logger *logger, int priority,
+		   const char *format, ...)
+    __attribute__((format(printf, 3, 4)));
 
 static inline int is_android()
 {
@@ -61,7 +85,8 @@ static inline int running_with_asan()
 int lookup_syscall(const char *name);
 const char *lookup_syscall_name(int nr);
 
-long int parse_constant(char *constant_str, char **endptr);
+long int parse_constant(const struct logger *logger, char *constant_str,
+			char **endptr);
 int parse_size(size_t *size, const char *sizespec);
 
 char *strip(char *s);

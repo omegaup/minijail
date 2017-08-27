@@ -185,6 +185,7 @@ struct minijail {
 	struct hook *hooks_tail;
 	struct preserved_fd preserved_fds[MAX_PRESERVED_FDS];
 	size_t preserved_fd_count;
+	struct logger logger;
 };
 
 /*
@@ -242,7 +243,7 @@ struct minijail API *minijail_new(void)
 void API minijail_change_uid(struct minijail *j, uid_t uid)
 {
 	if (uid == 0)
-		die("useless change to uid 0");
+		die(&j->logger, "useless change to uid 0");
 	j->uid = uid;
 	j->flags.uid = 1;
 }
@@ -250,7 +251,7 @@ void API minijail_change_uid(struct minijail *j, uid_t uid)
 void API minijail_change_gid(struct minijail *j, gid_t gid)
 {
 	if (gid == 0)
-		die("useless change to gid 0");
+		die(&j->logger, "useless change to gid 0");
 	j->gid = gid;
 	j->flags.gid = 1;
 }
@@ -261,9 +262,10 @@ void API minijail_set_supplementary_gids(struct minijail *j, size_t size,
 	size_t i;
 
 	if (j->flags.inherit_suppl_gids)
-		die("cannot inherit *and* set supplementary groups");
+		die(&j->logger,
+		    "cannot inherit *and* set supplementary groups");
 	if (j->flags.keep_suppl_gids)
-		die("cannot keep *and* set supplementary groups");
+		die(&j->logger, "cannot keep *and* set supplementary groups");
 
 	if (size == 0) {
 		/* Clear supplementary groups. */
@@ -276,7 +278,8 @@ void API minijail_set_supplementary_gids(struct minijail *j, size_t size,
 	/* Copy the gid_t array. */
 	j->suppl_gid_list = calloc(size, sizeof(gid_t));
 	if (!j->suppl_gid_list) {
-		die("failed to allocate internal supplementary group array");
+		die(&j->logger,
+		    "failed to allocate internal supplementary group array");
 	}
 	for (i = 0; i < size; i++) {
 		j->suppl_gid_list[i] = list[i];
@@ -372,7 +375,8 @@ void API minijail_use_seccomp_filter(struct minijail *j)
 void API minijail_set_seccomp_filter_tsync(struct minijail *j)
 {
 	if (j->filter_len > 0 && j->filter_prog != NULL) {
-		die("minijail_set_seccomp_filter_tsync() must be called "
+		die(&j->logger,
+		    "minijail_set_seccomp_filter_tsync() must be called "
 		    "before minijail_parse_seccomp_filters()");
 	}
 	j->flags.seccomp_filter_tsync = 1;
@@ -381,7 +385,8 @@ void API minijail_set_seccomp_filter_tsync(struct minijail *j)
 void API minijail_log_seccomp_filter_failures(struct minijail *j)
 {
 	if (j->filter_len > 0 && j->filter_prog != NULL) {
-		die("minijail_log_seccomp_filter_failures() must be called "
+		die(&j->logger,
+		    "minijail_log_seccomp_filter_failures() must be called "
 		    "before minijail_parse_seccomp_filters()");
 	}
 	j->flags.seccomp_filter_logging = 1;
@@ -398,7 +403,7 @@ void API minijail_use_caps(struct minijail *j, uint64_t capmask)
 	 * file capabilities.
 	 */
 	if (j->flags.capbset_drop) {
-		warn("overriding bounding set configuration");
+		warn(&j->logger, "overriding bounding set configuration");
 		j->cap_bset = 0;
 		j->flags.capbset_drop = 0;
 	}
@@ -416,7 +421,8 @@ void API minijail_capbset_drop(struct minijail *j, uint64_t capmask)
 		 * bounding set. 'minijail_capbset_drop' and 'minijail_use_caps'
 		 * are mutually exclusive.
 		 */
-		die("runtime capabilities already configured, can't drop "
+		die(&j->logger,
+		    "runtime capabilities already configured, can't drop "
 		    "bounding set separately");
 	}
 	j->cap_bset = capmask;
@@ -442,7 +448,7 @@ void API minijail_namespace_enter_vfs(struct minijail *j, const char *ns_path)
 {
 	int ns_fd = open(ns_path, O_RDONLY | O_CLOEXEC);
 	if (ns_fd < 0) {
-		pdie("failed to open namespace '%s'", ns_path);
+		pdie(&j->logger, "failed to open namespace '%s'", ns_path);
 	}
 	j->mountns_fd = ns_fd;
 	j->flags.enter_vfs = 1;
@@ -502,7 +508,7 @@ void API minijail_namespace_enter_net(struct minijail *j, const char *ns_path)
 {
 	int ns_fd = open(ns_path, O_RDONLY | O_CLOEXEC);
 	if (ns_fd < 0) {
-		pdie("failed to open namespace '%s'", ns_path);
+		pdie(&j->logger, "failed to open namespace '%s'", ns_path);
 	}
 	j->netns_fd = ns_fd;
 	j->flags.enter_net = 1;
@@ -654,6 +660,13 @@ void API minijail_mount_tmp_size(struct minijail *j, size_t size)
 	j->flags.mount_tmp = 1;
 }
 
+void API minijail_log_to_fd(struct minijail *j, int fd, int min_priority)
+{
+	j->logger.logger = LOG_TO_FD;
+	j->logger.fd = fd;
+	j->logger.min_priority = min_priority;
+}
+
 int API minijail_write_pid_file(struct minijail *j, const char *path)
 {
 	j->pid_file_path = strdup(path);
@@ -729,7 +742,7 @@ int API minijail_mount_with_data(struct minijail *j, const char *src,
 	}
 	m->flags = flags;
 
-	info("mount %s -> %s type '%s'", src, dest, type);
+	info(&j->logger, "mount %s -> %s type '%s'", src, dest, type);
 
 	/*
 	 * Force vfs namespacing so the mounts don't leak out into the
@@ -829,8 +842,8 @@ static int seccomp_should_parse_filters(struct minijail *j)
 		 * in that case, disable seccomp and skip loading the filters.
 		 */
 		if ((errno == EINVAL) && seccomp_can_softfail()) {
-			warn("not loading seccomp filters, seccomp filter not "
-			     "supported");
+			warn(&j->logger, "not loading seccomp filters, seccomp "
+					 "filter not supported");
 			clear_seccomp_options(j);
 			return 0;
 		}
@@ -846,12 +859,14 @@ static int seccomp_should_parse_filters(struct minijail *j)
 				SECCOMP_FILTER_FLAG_TSYNC, NULL) == -1) {
 			int saved_errno = errno;
 			if (saved_errno == ENOSYS && seccomp_can_softfail()) {
-				warn("seccomp(2) syscall not supported");
+				warn(&j->logger,
+				     "seccomp(2) syscall not supported");
 				clear_seccomp_options(j);
 				return 0;
 			} else if (saved_errno == EINVAL &&
 				   seccomp_can_softfail()) {
 				warn(
+				    &j->logger,
 				    "seccomp filter thread sync not supported");
 				clear_seccomp_options(j);
 				return 0;
@@ -875,8 +890,8 @@ static int parse_seccomp_filters(struct minijail *j, const char *filename,
 	    j->flags.seccomp_filter_tsync || j->flags.seccomp_filter_logging;
 	int allow_logging = j->flags.seccomp_filter_logging;
 
-	if (compile_filter(filename, policy_file, fprog, use_ret_trap,
-			   allow_logging)) {
+	if (compile_filter(&j->logger, filename, policy_file, fprog,
+			   use_ret_trap, allow_logging)) {
 		free(fprog);
 		return -1;
 	}
@@ -893,11 +908,13 @@ void API minijail_parse_seccomp_filters(struct minijail *j, const char *path)
 
 	FILE *file = fopen(path, "r");
 	if (!file) {
-		pdie("failed to open seccomp filter file '%s'", path);
+		pdie(&j->logger, "failed to open seccomp filter file '%s'",
+		     path);
 	}
 
 	if (parse_seccomp_filters(j, path, file) != 0) {
-		die("failed to compile seccomp filter BPF program in '%s'",
+		die(&j->logger,
+		    "failed to compile seccomp filter BPF program in '%s'",
 		    path);
 	}
 	fclose(file);
@@ -910,21 +927,22 @@ void API minijail_parse_seccomp_filters_from_fd(struct minijail *j, int fd)
 
 	FILE *file = fdopen(fd, "r");
 	if (!file) {
-		pdie("failed to associate stream with fd %d", fd);
+		pdie(&j->logger, "failed to associate stream with fd %d", fd);
 	}
 
 	char fd_path[PATH_MAX], path[PATH_MAX] = {};
 	int ret = snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
 	if (ret == -1)
-		pdie("failed to create path for fd %d", fd);
+		pdie(&j->logger, "failed to create path for fd %d", fd);
 	ssize_t len = readlink(fd_path, path, sizeof(path));
 	if (len == -1) {
-		pwarn("failed to get path of fd %d", fd);
+		pwarn(&j->logger, "failed to get path of fd %d", fd);
 		strncpy(path, "<fd>", sizeof(path));
 	}
 
 	if (parse_seccomp_filters(j, path, file) != 0) {
-		die("failed to compile seccomp filter BPF program from fd %d",
+		die(&j->logger,
+		    "failed to compile seccomp filter BPF program from fd %d",
 		    fd);
 	}
 	fclose(file);
@@ -1237,7 +1255,7 @@ static int mount_one(const struct minijail *j, struct mountpoint *m)
 
 	if (setup_mount_destination(m->src, dest, j->uid, j->gid,
 				    (m->flags & MS_BIND)))
-		pdie("creating mount target '%s' failed", dest);
+		pdie(&j->logger, "creating mount target '%s' failed", dest);
 
 	/*
 	 * R/O bind mounts have to be remounted since 'bind' and 'ro'
@@ -1251,14 +1269,14 @@ static int mount_one(const struct minijail *j, struct mountpoint *m)
 
 	ret = mount(m->src, dest, m->type, m->flags, m->data);
 	if (ret)
-		pdie("mount: %s -> %s", m->src, dest);
+		pdie(&j->logger, "mount: %s -> %s", m->src, dest);
 
 	if (remount_ro) {
 		m->flags |= MS_RDONLY;
 		ret = mount(m->src, dest, NULL,
 			    m->flags | MS_REMOUNT, m->data);
 		if (ret)
-			pdie("bind ro: %s -> %s", m->src, dest);
+			pdie(&j->logger, "bind ro: %s -> %s", m->src, dest);
 	}
 
 	free(dest);
@@ -1296,28 +1314,28 @@ static int enter_pivot_root(const struct minijail *j)
 	 */
 	oldroot = open("/", O_DIRECTORY | O_RDONLY | O_CLOEXEC);
 	if (oldroot < 0)
-		pdie("failed to open / for fchdir");
+		pdie(&j->logger, "failed to open / for fchdir");
 	newroot = open(j->chrootdir, O_DIRECTORY | O_RDONLY | O_CLOEXEC);
 	if (newroot < 0)
-		pdie("failed to open %s for fchdir", j->chrootdir);
+		pdie(&j->logger, "failed to open %s for fchdir", j->chrootdir);
 
 	/*
 	 * To ensure j->chrootdir is the root of a filesystem,
 	 * do a self bind mount.
 	 */
 	if (mount(j->chrootdir, j->chrootdir, "bind", MS_BIND | MS_REC, ""))
-		pdie("failed to bind mount '%s'", j->chrootdir);
+		pdie(&j->logger, "failed to bind mount '%s'", j->chrootdir);
 	if (chdir(j->chrootdir))
 		return -errno;
 	if (syscall(SYS_pivot_root, ".", "."))
-		pdie("pivot_root");
+		pdie(&j->logger, "pivot_root");
 
 	/*
 	 * Now the old root is mounted on top of the new root. Use fchdir(2) to
 	 * change to the old root and unmount it.
 	 */
 	if (fchdir(oldroot))
-		pdie("failed to fchdir to old /");
+		pdie(&j->logger, "failed to fchdir to old /");
 
 	/*
 	 * If j->flags.skip_remount_private was enabled for minijail_enter(),
@@ -1329,10 +1347,11 @@ static int enter_pivot_root(const struct minijail *j)
 	 * remounting them as MS_PRIVATE.
 	 */
 	if (mount(NULL, ".", NULL, MS_REC | MS_PRIVATE, NULL))
-		pdie("failed to mount(/, private) before umount(/)");
+		pdie(&j->logger,
+		     "failed to mount(/, private) before umount(/)");
 	/* The old root might be busy, so use lazy unmount. */
 	if (umount2(".", MNT_DETACH))
-		pdie("umount(/)");
+		pdie(&j->logger, "umount(/)");
 	/* Change back to the new root. */
 	if (fchdir(newroot))
 		return -errno;
@@ -1359,9 +1378,9 @@ static int mount_tmp(const struct minijail *j)
 	ret = snprintf(data, sizeof(data), fmt, j->tmpfs_size);
 
 	if (ret <= 0)
-		pdie("tmpfs size spec error");
+		pdie(&j->logger, "tmpfs size spec error");
 	else if ((size_t)ret >= sizeof(data))
-		pdie("tmpfs size spec too large");
+		pdie(&j->logger, "tmpfs size spec too large");
 	return mount("none", "/tmp", "tmpfs", MS_NODEV | MS_NOEXEC | MS_NOSUID,
 		     data);
 }
@@ -1383,7 +1402,8 @@ static int remount_proc_readonly(const struct minijail *j)
 		 * See http://man7.org/linux/man-pages/man7/user_namespaces.7.html
 		 */
 		if (j->flags.userns) {
-			info("umount(/proc, MNT_DETACH) failed, "
+			info(&j->logger,
+			     "umount(/proc, MNT_DETACH) failed, "
 			     "this is expected when using user namespaces");
 		} else {
 			return -errno;
@@ -1397,12 +1417,12 @@ static int remount_proc_readonly(const struct minijail *j)
 static void kill_child_and_die(const struct minijail *j, const char *msg)
 {
 	kill(j->initpid, SIGKILL);
-	die("%s", msg);
+	die(&j->logger, "%s", msg);
 }
 
 static void write_pid_file_or_die(const struct minijail *j)
 {
-	if (write_pid_to_path(j->initpid, j->pid_file_path))
+	if (write_pid_to_path(&j->logger, j->initpid, j->pid_file_path))
 		kill_child_and_die(j, "failed to write pid file");
 }
 
@@ -1411,7 +1431,7 @@ static void add_to_cgroups_or_die(const struct minijail *j)
 	size_t i;
 
 	for (i = 0; i < j->cgroup_count; ++i) {
-		if (write_pid_to_path(j->initpid, j->cgroups[i]))
+		if (write_pid_to_path(&j->logger, j->initpid, j->cgroups[i]))
 			kill_child_and_die(j, "failed to add to cgroups");
 	}
 }
@@ -1431,29 +1451,37 @@ static void set_rlimits_or_die(const struct minijail *j)
 
 static void write_ugid_maps_or_die(const struct minijail *j)
 {
-	if (j->uidmap && write_proc_file(j->initpid, j->uidmap, "uid_map") != 0)
+	if (j->uidmap &&
+	    write_proc_file(&j->logger, j->initpid, j->uidmap, "uid_map") !=
+		0) {
 		kill_child_and_die(j, "failed to write uid_map");
+	}
 	if (j->gidmap && j->flags.disable_setgroups) {
 		/* Older kernels might not have the /proc/<pid>/setgroups files. */
-		int ret = write_proc_file(j->initpid, "deny", "setgroups");
+		int ret = write_proc_file(&j->logger, j->initpid, "deny",
+					  "setgroups");
 		if (ret != 0) {
 			if (ret == -ENOENT) {
 				/* See http://man7.org/linux/man-pages/man7/user_namespaces.7.html. */
-				warn("could not disable setgroups(2)");
+				warn(&j->logger,
+				     "could not disable setgroups(2)");
 			} else
 				kill_child_and_die(j, "failed to disable setgroups(2)");
 		}
 	}
-	if (j->gidmap && write_proc_file(j->initpid, j->gidmap, "gid_map") != 0)
+	if (j->gidmap &&
+	    write_proc_file(&j->logger, j->initpid, j->gidmap, "gid_map") !=
+		0) {
 		kill_child_and_die(j, "failed to write gid_map");
+	}
 }
 
 static void enter_user_namespace(const struct minijail *j)
 {
 	if (j->uidmap && setresuid(0, 0, 0))
-		pdie("user_namespaces: setresuid(0, 0, 0) failed");
+		pdie(&j->logger, "user_namespaces: setresuid(0, 0, 0) failed");
 	if (j->gidmap && setresgid(0, 0, 0))
-		pdie("user_namespaces: setresgid(0, 0, 0) failed");
+		pdie(&j->logger, "user_namespaces: setresgid(0, 0, 0) failed");
 }
 
 static void parent_setup_complete(int *pipe_fds)
@@ -1466,7 +1494,7 @@ static void parent_setup_complete(int *pipe_fds)
  * wait_for_parent_setup: Called by the child process to wait for any
  * further parent-side setup to complete before continuing.
  */
-static void wait_for_parent_setup(int *pipe_fds)
+static void wait_for_parent_setup(const struct logger *logger, int *pipe_fds)
 {
 	char buf;
 
@@ -1474,7 +1502,7 @@ static void wait_for_parent_setup(int *pipe_fds)
 
 	/* Wait for parent to complete setup and close the pipe. */
 	if (read(pipe_fds[0], &buf, 1) != 0)
-		die("failed to sync with parent");
+		die(logger, "failed to sync with parent");
 	close(pipe_fds[0]);
 }
 
@@ -1482,33 +1510,37 @@ static void drop_ugid(const struct minijail *j)
 {
 	if (j->flags.inherit_suppl_gids + j->flags.keep_suppl_gids +
 	    j->flags.set_suppl_gids > 1) {
-		die("can only do one of inherit, keep, or set supplementary "
-		    "groups");
+		die(&j->logger, "can only do one of inherit, keep, or set "
+				"supplementary groups");
 	}
 
 	if (j->flags.inherit_suppl_gids) {
 		if (initgroups(j->user, j->usergid))
-			pdie("initgroups(%s, %d) failed", j->user, j->usergid);
+			pdie(&j->logger, "initgroups(%s, %d) failed", j->user,
+			     j->usergid);
 	} else if (j->flags.set_suppl_gids) {
 		if (setgroups(j->suppl_gid_count, j->suppl_gid_list))
-			pdie("setgroups(suppl_gids) failed");
+			pdie(&j->logger, "setgroups(suppl_gids) failed");
 	} else if (!j->flags.keep_suppl_gids) {
 		/*
 		 * Only attempt to clear supplementary groups if we are changing
 		 * users or groups.
 		 */
 		if ((j->flags.uid || j->flags.gid) && setgroups(0, NULL))
-			pdie("setgroups(0, NULL) failed");
+			pdie(&j->logger, "setgroups(0, NULL) failed");
 	}
 
 	if (j->flags.gid && setresgid(j->gid, j->gid, j->gid))
-		pdie("setresgid(%d, %d, %d) failed", j->gid, j->gid, j->gid);
+		pdie(&j->logger, "setresgid(%d, %d, %d) failed", j->gid, j->gid,
+		     j->gid);
 
 	if (j->flags.uid && setresuid(j->uid, j->uid, j->uid))
-		pdie("setresuid(%d, %d, %d) failed", j->uid, j->uid, j->uid);
+		pdie(&j->logger, "setresuid(%d, %d, %d) failed", j->uid, j->uid,
+		     j->uid);
 }
 
-static void drop_capbset(uint64_t keep_mask, unsigned int last_valid_cap)
+static void drop_capbset(const struct logger *logger, uint64_t keep_mask,
+			 unsigned int last_valid_cap)
 {
 	const uint64_t one = 1;
 	unsigned int i;
@@ -1516,7 +1548,8 @@ static void drop_capbset(uint64_t keep_mask, unsigned int last_valid_cap)
 		if (keep_mask & (one << i))
 			continue;
 		if (prctl(PR_CAPBSET_DROP, i))
-			pdie("could not drop capability from bounding set");
+			pdie(logger,
+			     "could not drop capability from bounding set");
 	}
 }
 
@@ -1531,9 +1564,9 @@ static void drop_caps(const struct minijail *j, unsigned int last_valid_cap)
 	const uint64_t one = 1;
 	unsigned int i;
 	if (!caps)
-		die("can't get process caps");
+		die(&j->logger, "can't get process caps");
 	if (cap_clear(caps))
-		die("can't clear caps");
+		die(&j->logger, "can't clear caps");
 
 	for (i = 0; i < ncaps && i <= last_valid_cap; ++i) {
 		/* Keep CAP_SETPCAP for dropping bounding set bits. */
@@ -1541,14 +1574,14 @@ static void drop_caps(const struct minijail *j, unsigned int last_valid_cap)
 			continue;
 		flag[0] = i;
 		if (cap_set_flag(caps, CAP_EFFECTIVE, 1, flag, CAP_SET))
-			die("can't add effective cap");
+			die(&j->logger, "can't add effective cap");
 		if (cap_set_flag(caps, CAP_PERMITTED, 1, flag, CAP_SET))
-			die("can't add permitted cap");
+			die(&j->logger, "can't add permitted cap");
 		if (cap_set_flag(caps, CAP_INHERITABLE, 1, flag, CAP_SET))
-			die("can't add inheritable cap");
+			die(&j->logger, "can't add inheritable cap");
 	}
 	if (cap_set_proc(caps))
-		die("can't apply initial cleaned capset");
+		die(&j->logger, "can't apply initial cleaned capset");
 
 	/*
 	 * Instead of dropping bounding set first, do it here in case
@@ -1556,21 +1589,21 @@ static void drop_caps(const struct minijail *j, unsigned int last_valid_cap)
 	 * have been used above to raise a capability that wasn't already
 	 * present. This requires CAP_SETPCAP, so we raised/kept it above.
 	 */
-	drop_capbset(j->caps, last_valid_cap);
+	drop_capbset(&j->logger, j->caps, last_valid_cap);
 
 	/* If CAP_SETPCAP wasn't specifically requested, now we remove it. */
 	if ((j->caps & (one << CAP_SETPCAP)) == 0) {
 		flag[0] = CAP_SETPCAP;
 		if (cap_set_flag(caps, CAP_EFFECTIVE, 1, flag, CAP_CLEAR))
-			die("can't clear effective cap");
+			die(&j->logger, "can't clear effective cap");
 		if (cap_set_flag(caps, CAP_PERMITTED, 1, flag, CAP_CLEAR))
-			die("can't clear permitted cap");
+			die(&j->logger, "can't clear permitted cap");
 		if (cap_set_flag(caps, CAP_INHERITABLE, 1, flag, CAP_CLEAR))
-			die("can't clear inheritable cap");
+			die(&j->logger, "can't clear inheritable cap");
 	}
 
 	if (cap_set_proc(caps))
-		die("can't apply final cleaned capset");
+		die(&j->logger, "can't apply final cleaned capset");
 
 	/*
 	 * If ambient capabilities are supported, clear all capabilities first,
@@ -1578,11 +1611,11 @@ static void drop_caps(const struct minijail *j, unsigned int last_valid_cap)
 	 */
 	if (j->flags.set_ambient_caps) {
 		if (!cap_ambient_supported()) {
-			pdie("ambient capabilities not supported");
+			pdie(&j->logger, "ambient capabilities not supported");
 		}
 		if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0) !=
 		    0) {
-			pdie("can't clear ambient capabilities");
+			pdie(&j->logger, "can't clear ambient capabilities");
 		}
 
 		for (i = 0; i < ncaps && i <= last_valid_cap; ++i) {
@@ -1591,8 +1624,9 @@ static void drop_caps(const struct minijail *j, unsigned int last_valid_cap)
 
 			if (prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, i, 0,
 				  0) != 0) {
-				pdie("prctl(PR_CAP_AMBIENT, "
-				     "PR_CAP_AMBIENT_RAISE, %u) failed",
+				pdie(&j->logger, "prctl(PR_CAP_AMBIENT, "
+						 "PR_CAP_AMBIENT_RAISE, %u) "
+						 "failed",
 				     i);
 			}
 		}
@@ -1609,7 +1643,7 @@ static void set_seccomp_filter(const struct minijail *j)
 	 */
 	if (j->flags.no_new_privs) {
 		if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0))
-			pdie("prctl(PR_SET_NO_NEW_PRIVS)");
+			pdie(&j->logger, "prctl(PR_SET_NO_NEW_PRIVS)");
 	}
 
 	/*
@@ -1623,7 +1657,8 @@ static void set_seccomp_filter(const struct minijail *j)
 	 * seccomp filter.
 	 */
 	if (j->flags.seccomp_filter && running_with_asan()) {
-		warn("running with ASan, not setting seccomp filter");
+		warn(&j->logger,
+		     "running with ASan, not setting seccomp filter");
 		return;
 	}
 
@@ -1633,18 +1668,22 @@ static void set_seccomp_filter(const struct minijail *j)
 			 * If logging seccomp filter failures,
 			 * install the SIGSYS handler first.
 			 */
-			if (install_sigsys_handler())
-				pdie("failed to install SIGSYS handler");
-			warn("logging seccomp filter failures");
+			if (install_sigsys_handler()) {
+				pdie(&j->logger,
+				     "failed to install SIGSYS handler");
+			}
+			warn(&j->logger, "logging seccomp filter failures");
 		} else if (j->flags.seccomp_filter_tsync) {
 			/*
 			 * If setting thread sync,
 			 * reset the SIGSYS signal handler so that
 			 * the entire thread group is killed.
 			 */
-			if (signal(SIGSYS, SIG_DFL) == SIG_ERR)
-				pdie("failed to reset SIGSYS disposition");
-			info("reset SIGSYS disposition");
+			if (signal(SIGSYS, SIG_DFL) == SIG_ERR) {
+				pdie(&j->logger,
+				     "failed to reset SIGSYS disposition");
+			}
+			info(&j->logger, "reset SIGSYS disposition");
 		}
 	}
 
@@ -1656,12 +1695,13 @@ static void set_seccomp_filter(const struct minijail *j)
 			if (sys_seccomp(SECCOMP_SET_MODE_FILTER,
 					SECCOMP_FILTER_FLAG_TSYNC,
 					j->filter_prog)) {
-				pdie("seccomp(tsync) failed");
+				pdie(&j->logger, "seccomp(tsync) failed");
 			}
 		} else {
 			if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER,
 				  j->filter_prog)) {
-				pdie("prctl(seccomp_filter) failed");
+				pdie(&j->logger,
+				     "prctl(seccomp_filter) failed");
 			}
 		}
 	}
@@ -1731,7 +1771,7 @@ static void run_hooks_or_die(const struct minijail *j,
 		rc = c->hook(c->payload);
 		if (rc != 0) {
 			errno = -rc;
-			pdie("%s hook (index %d) failed",
+			pdie(&j->logger, "%s hook (index %d) failed",
 			     lookup_hook_name(event), hook_index);
 		}
 		/* Only increase the index within the same hook event type. */
@@ -1747,15 +1787,17 @@ void API minijail_enter(const struct minijail *j)
 	 */
 	unsigned int last_valid_cap = 0;
 	if (j->flags.capbset_drop || j->flags.use_caps)
-		last_valid_cap = get_last_valid_cap();
+		last_valid_cap = get_last_valid_cap(&j->logger);
 
-	if (j->flags.pids)
-		die("tried to enter a pid-namespaced jail;"
-		    " try minijail_run()?");
+	if (j->flags.pids) {
+		die(&j->logger, "tried to enter a pid-namespaced jail;"
+				" try minijail_run()?");
+	}
 
-	if (j->flags.inherit_suppl_gids && !j->user)
-		die("cannot inherit supplementary groups without setting a "
-		    "username");
+	if (j->flags.inherit_suppl_gids && !j->user) {
+		die(&j->logger, "cannot inherit supplementary groups without "
+				"setting a username");
+	}
 
 	/*
 	 * We can't recover from failures if we've dropped privileges partially,
@@ -1763,11 +1805,11 @@ void API minijail_enter(const struct minijail *j)
 	 * entire process.
 	 */
 	if (j->flags.enter_vfs && setns(j->mountns_fd, CLONE_NEWNS))
-		pdie("setns(CLONE_NEWNS) failed");
+		pdie(&j->logger, "setns(CLONE_NEWNS) failed");
 
 	if (j->flags.vfs) {
 		if (unshare(CLONE_NEWNS))
-			pdie("unshare(CLONE_NEWNS) failed");
+			pdie(&j->logger, "unshare(CLONE_NEWNS) failed");
 		/*
 		 * Unless asked not to, remount all filesystems as private.
 		 * If they are shared, new bind mounts will creep out of our
@@ -1775,52 +1817,56 @@ void API minijail_enter(const struct minijail *j)
 		 * https://www.kernel.org/doc/Documentation/filesystems/sharedsubtree.txt
 		 */
 		if (!j->flags.skip_remount_private) {
-			if (mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL))
-				pdie("mount(NULL, /, NULL, MS_REC | MS_PRIVATE,"
-				     " NULL) failed");
+			if (mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL)) {
+				pdie(&j->logger, "mount(NULL, /, NULL, MS_REC "
+						 "| MS_PRIVATE, NULL) failed");
+			}
 		}
 	}
 
 	if (j->flags.ipc && unshare(CLONE_NEWIPC)) {
-		pdie("unshare(CLONE_NEWIPC) failed");
+		pdie(&j->logger, "unshare(CLONE_NEWIPC) failed");
 	}
 
 	if (j->flags.uts) {
 		if (unshare(CLONE_NEWUTS))
-			pdie("unshare(CLONE_NEWUTS) failed");
+			pdie(&j->logger, "unshare(CLONE_NEWUTS) failed");
 
 		if (j->hostname && sethostname(j->hostname, strlen(j->hostname)))
-			pdie("sethostname(%s) failed", j->hostname);
+			pdie(&j->logger, "sethostname(%s) failed", j->hostname);
 	}
 
 	if (j->flags.enter_net) {
 		if (setns(j->netns_fd, CLONE_NEWNET))
-			pdie("setns(CLONE_NEWNET) failed");
+			pdie(&j->logger, "setns(CLONE_NEWNET) failed");
 	} else if (j->flags.net) {
 		if (unshare(CLONE_NEWNET))
-			pdie("unshare(CLONE_NEWNET) failed");
-		config_net_loopback();
+			pdie(&j->logger, "unshare(CLONE_NEWNET) failed");
+		config_net_loopback(&j->logger);
 	}
 
 	if (j->flags.ns_cgroups && unshare(CLONE_NEWCGROUP))
-		pdie("unshare(CLONE_NEWCGROUP) failed");
+		pdie(&j->logger, "unshare(CLONE_NEWCGROUP) failed");
 
 	if (j->flags.new_session_keyring) {
-		if (syscall(SYS_keyctl, KEYCTL_JOIN_SESSION_KEYRING, NULL) < 0)
-			pdie("keyctl(KEYCTL_JOIN_SESSION_KEYRING) failed");
+		if (syscall(SYS_keyctl, KEYCTL_JOIN_SESSION_KEYRING, NULL) <
+		    0) {
+			pdie(&j->logger,
+			     "keyctl(KEYCTL_JOIN_SESSION_KEYRING) failed");
+		}
 	}
 
 	if (j->flags.chroot && enter_chroot(j))
-		pdie("chroot");
+		pdie(&j->logger, "chroot");
 
 	if (j->flags.pivot_root && enter_pivot_root(j))
-		pdie("pivot_root");
+		pdie(&j->logger, "pivot_root");
 
 	if (j->flags.mount_tmp && mount_tmp(j))
-		pdie("mount_tmp");
+		pdie(&j->logger, "mount_tmp");
 
 	if (j->flags.remount_proc_ro && remount_proc_readonly(j))
-		pdie("remount");
+		pdie(&j->logger, "remount");
 
 	run_hooks_or_die(j, MINIJAIL_HOOK_EVENT_PRE_DROP_CAPS);
 
@@ -1829,7 +1875,7 @@ void API minijail_enter(const struct minijail *j)
 	 * from the thread's (permitted|inheritable|effective) sets, do it now.
 	 */
 	if (j->flags.capbset_drop) {
-		drop_capbset(j->cap_bset, last_valid_cap);
+		drop_capbset(&j->logger, j->cap_bset, last_valid_cap);
 	}
 
 	if (j->flags.use_caps) {
@@ -1840,10 +1886,10 @@ void API minijail_enter(const struct minijail *j)
 		 * lock securebits.
 		 */
 		if (prctl(PR_SET_KEEPCAPS, 1))
-			pdie("prctl(PR_SET_KEEPCAPS) failed");
+			pdie(&j->logger, "prctl(PR_SET_KEEPCAPS) failed");
 
-		if (lock_securebits(j->securebits_skip_mask) < 0) {
-			pdie("locking securebits failed");
+		if (lock_securebits(&j->logger, j->securebits_skip_mask) < 0) {
+			pdie(&j->logger, "locking securebits failed");
 		}
 	}
 
@@ -1875,7 +1921,7 @@ void API minijail_enter(const struct minijail *j)
 	 */
 	if (j->flags.alt_syscall) {
 		if (prctl(PR_ALT_SYSCALL, 1, j->alt_syscall_table))
-			pdie("prctl(PR_ALT_SYSCALL) failed");
+			pdie(&j->logger, "prctl(PR_ALT_SYSCALL) failed");
 	}
 
 	/*
@@ -1884,10 +1930,10 @@ void API minijail_enter(const struct minijail *j)
 	 */
 	if (j->flags.seccomp && prctl(PR_SET_SECCOMP, 1)) {
 		if ((errno == EINVAL) && seccomp_can_softfail()) {
-			warn("seccomp not supported");
+			warn(&j->logger, "seccomp not supported");
 			return;
 		}
-		pdie("prctl(PR_SET_SECCOMP) failed");
+		pdie(&j->logger, "prctl(PR_SET_SECCOMP) failed");
 	}
 }
 
@@ -2228,13 +2274,15 @@ static int minijail_run_internal(struct minijail *j,
 	if (!use_preload) {
 		if (j->flags.use_caps && j->caps != 0 &&
 		    !j->flags.set_ambient_caps) {
-			die("non-empty, non-ambient capabilities are not "
+			die(&j->logger,
+			    "non-empty, non-ambient capabilities are not "
 			    "supported without LD_PRELOAD");
 		}
 	}
 
 	if (use_preload && j->hooks_head != NULL) {
-		die("Minijail hooks are not supported with LD_PRELOAD");
+		die(&j->logger,
+		    "Minijail hooks are not supported with LD_PRELOAD");
 	}
 
 	/*
@@ -2250,7 +2298,7 @@ static int minijail_run_internal(struct minijail *j,
 	 */
 	if (setpgid(0 /* use calling PID */, 0 /* make PGID = PID */)) {
 		if (errno != EPERM) {
-			pdie("setpgid(0, 0) failed");
+			pdie(&j->logger, "setpgid(0, 0) failed");
 		}
 	}
 
@@ -2355,7 +2403,7 @@ static int minijail_run_internal(struct minijail *j,
 		if (use_preload) {
 			free(oldenv_copy);
 		}
-		die("failed to fork child");
+		die(&j->logger, "failed to fork child");
 	}
 
 	if (child_pid) {
@@ -2399,7 +2447,8 @@ static int minijail_run_internal(struct minijail *j,
 			close(pipe_fds[1]);	/* write endpoint */
 			if (ret) {
 				kill(j->initpid, SIGKILL);
-				die("failed to send marshalled minijail");
+				die(&j->logger,
+				    "failed to send marshalled minijail");
 			}
 		}
 
@@ -2438,9 +2487,9 @@ static int minijail_run_internal(struct minijail *j,
 	if (j->flags.reset_signal_mask) {
 		sigset_t signal_mask;
 		if (sigemptyset(&signal_mask) != 0)
-			pdie("sigemptyset failed");
+			pdie(&j->logger, "sigemptyset failed");
 		if (sigprocmask(SIG_SETMASK, &signal_mask, NULL) != 0)
-			pdie("sigprocmask failed");
+			pdie(&j->logger, "sigprocmask failed");
 	}
 
 	if (j->flags.close_open_fds) {
@@ -2477,14 +2526,15 @@ static int minijail_run_internal(struct minijail *j,
 		}
 
 		if (close_open_fds(inheritable_fds, size) < 0)
-			die("failed to close open file descriptors");
+			die(&j->logger,
+			    "failed to close open file descriptors");
 	}
 
 	if (redirect_fds(j))
-		die("failed to set up fd redirections");
+		die(&j->logger, "failed to set up fd redirections");
 
 	if (sync_child)
-		wait_for_parent_setup(child_sync_pipe_fds);
+		wait_for_parent_setup(&j->logger, child_sync_pipe_fds);
 
 	if (j->flags.userns)
 		enter_user_namespace(j);
@@ -2496,7 +2546,7 @@ static int minijail_run_internal(struct minijail *j,
 	if (status_out->pstdin_fd) {
 		if (setup_and_dupe_pipe_end(stdin_fds, 0 /* read end */,
 					    STDIN_FILENO) < 0)
-			die("failed to set up stdin pipe");
+			die(&j->logger, "failed to set up stdin pipe");
 	}
 
 	/*
@@ -2506,7 +2556,7 @@ static int minijail_run_internal(struct minijail *j,
 	if (status_out->pstdout_fd) {
 		if (setup_and_dupe_pipe_end(stdout_fds, 1 /* write end */,
 					    STDOUT_FILENO) < 0)
-			die("failed to set up stdout pipe");
+			die(&j->logger, "failed to set up stdout pipe");
 	}
 
 	/*
@@ -2516,7 +2566,7 @@ static int minijail_run_internal(struct minijail *j,
 	if (status_out->pstderr_fd) {
 		if (setup_and_dupe_pipe_end(stderr_fds, 1 /* write end */,
 					    STDERR_FILENO) < 0)
-			die("failed to set up stderr pipe");
+			die(&j->logger, "failed to set up stderr pipe");
 	}
 
 	/*
@@ -2528,7 +2578,7 @@ static int minijail_run_internal(struct minijail *j,
 	if (isatty(STDIN_FILENO) || isatty(STDOUT_FILENO) ||
 	    isatty(STDERR_FILENO)) {
 		if (setsid() < 0) {
-			pdie("setsid() failed");
+			pdie(&j->logger, "setsid() failed");
 		}
 	}
 
@@ -2586,7 +2636,7 @@ static int minijail_run_internal(struct minijail *j,
 	 */
 	ret = execve(config->filename, config->argv, environ);
 	if (ret == -1) {
-		pwarn("execve(%s) failed", config->filename);
+		pwarn(&j->logger, "execve(%s) failed", config->filename);
 	}
 	_exit(ret);
 }
@@ -2611,7 +2661,7 @@ int API minijail_wait(struct minijail *j)
 		int error_status = st;
 		if (WIFSIGNALED(st)) {
 			int signum = WTERMSIG(st);
-			warn("child process %d received signal %d",
+			warn(&j->logger, "child process %d received signal %d",
 			     j->initpid, signum);
 			/*
 			 * We return MINIJAIL_ERR_JAIL if the process received
@@ -2631,7 +2681,7 @@ int API minijail_wait(struct minijail *j)
 
 	int exit_status = WEXITSTATUS(st);
 	if (exit_status != 0)
-		info("child process %d exited with status %d",
+		info(&j->logger, "child process %d exited with status %d",
 		     j->initpid, exit_status);
 
 	return exit_status;

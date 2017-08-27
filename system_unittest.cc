@@ -23,8 +23,13 @@
 #include <gtest/gtest.h>
 
 #include "system.h"
+#include "util.h"
 
 namespace {
+
+struct logger stderr_logger {
+  LOG_TO_FD, STDERR_FILENO, LOG_INFO,
+};
 
 // A random path that really really should not exist on the host.
 const char kNoSuchDir[] = "/.x/..x/...x/path/should/not/exist/";
@@ -59,7 +64,7 @@ char *get_temp_path() {
 
 // Sanity check for the cap range.
 TEST(get_last_valid_cap, basic) {
-  unsigned int cap = get_last_valid_cap();
+  unsigned int cap = get_last_valid_cap(&stderr_logger);
 
   // We pick 35 as it's been that since at least v3.0.
   // If this test is run on older kernels, it might fail.
@@ -114,7 +119,7 @@ TEST(setup_and_dupe_pipe_end, bad_index) {
 
 // An invalid path should return an error.
 TEST(write_pid_to_path, bad_path) {
-  EXPECT_NE(0, write_pid_to_path(0, kNoSuchDir));
+  EXPECT_NE(0, write_pid_to_path(&stderr_logger, 0, kNoSuchDir));
 }
 
 // Make sure we can write a pid to the file.
@@ -122,7 +127,7 @@ TEST(write_pid_to_path, basic) {
   char *path = get_temp_path();
   ASSERT_NE(nullptr, path);
 
-  EXPECT_EQ(0, write_pid_to_path(1234, path));
+  EXPECT_EQ(0, write_pid_to_path(&stderr_logger, 1234, path));
   FILE *fp = fopen(path, "re");
   unlink(path);
   EXPECT_NE(nullptr, fp);

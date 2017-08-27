@@ -49,18 +49,21 @@ extern "C" {
 #define PR_CAP_AMBIENT_CLEAR_ALL 4
 #endif
 
-int lock_securebits(uint64_t skip_mask);
+struct logger;
 
-unsigned int get_last_valid_cap(void);
+int lock_securebits(const struct logger *logger, uint64_t skip_mask);
+
+unsigned int get_last_valid_cap(const struct logger *logger);
 int cap_ambient_supported(void);
 
-int config_net_loopback(void);
+int config_net_loopback(const struct logger *logger);
 
 int setup_pipe_end(int fds[2], size_t index);
 int setup_and_dupe_pipe_end(int fds[2], size_t index, int fd);
 
-int write_pid_to_path(pid_t pid, const char *path);
-int write_proc_file(pid_t pid, const char *content, const char *basename);
+int write_pid_to_path(const struct logger *logger, pid_t pid, const char *path);
+int write_proc_file(const struct logger *logger, pid_t pid, const char *content,
+		    const char *basename);
 
 int setup_mount_destination(const char *source, const char *dest, uid_t uid,
 			    uid_t gid, bool bind);

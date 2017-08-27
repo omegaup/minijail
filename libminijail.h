@@ -181,6 +181,16 @@ void minijail_mount_tmp(struct minijail *j);
 void minijail_mount_tmp_size(struct minijail *j, size_t size);
 
 /*
+ * minijail_log_to_fd: enables logging to an FD instead of syslog.
+ * @j            minijail
+ * @fd           FD to log to. Caller must ensure this is available after
+ *               jailing (e.g. with minijail_preserve_fd()).
+ * @min_priority the minimum logging priority. Same as the priority argument
+ *               to syslog(2).
+ */
+void minijail_log_to_fd(struct minijail *j, int fd, int min_priority);
+
+/*
  * minijail_mount_with_data: when entering minijail @j,
  *   mounts @src at @dst with @flags and @data.
  * @j         minijail to bind inside

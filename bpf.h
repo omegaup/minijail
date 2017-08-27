@@ -167,8 +167,9 @@ static inline size_t set_bpf_instr(struct sock_filter *instr,
 	set_bpf_stmt((_filter), BPF_LD+BPF_W+BPF_ABS, syscall_nr)
 
 /* BPF label functions. */
-int bpf_resolve_jumps(struct bpf_labels *labels,
-		struct sock_filter *filter, size_t count);
+struct logger;
+int bpf_resolve_jumps(const struct logger *logger, struct bpf_labels *labels,
+		      struct sock_filter *filter, size_t count);
 int bpf_label_id(struct bpf_labels *labels, const char *label);
 void free_label_strings(struct bpf_labels *labels);
 

@@ -24,9 +24,12 @@ struct filter_block {
 	size_t total_len;
 };
 
+struct logger;
+
 struct parser_state {
 	const char *filename;
 	int line_number;
+	const struct logger *logger;
 };
 
 struct bpf_labels;
@@ -36,15 +39,16 @@ struct filter_block *compile_policy_line(struct parser_state *state, int nr,
 					 unsigned int label_id,
 					 struct bpf_labels *labels,
 					 int do_ret_trap);
-int compile_file(const char *filename, FILE *policy_file,
-		 struct filter_block *head, struct filter_block **arg_blocks,
-		 struct bpf_labels *labels, int use_ret_trap, int allow_logging,
+int compile_file(const struct logger *logger, const char *filename,
+		 FILE *policy_file, struct filter_block *head,
+		 struct filter_block **arg_blocks, struct bpf_labels *labels,
+		 int use_ret_trap, int allow_logging,
 		 unsigned int include_level);
-int compile_filter(const char *filename, FILE *policy_file,
-		   struct sock_fprog *prog, int do_ret_trap,
+int compile_filter(const struct logger *logger, const char *filename,
+		   FILE *policy_file, struct sock_fprog *prog, int do_ret_trap,
 		   int add_logging_syscalls);
 
-struct filter_block *new_filter_block(void);
+struct filter_block *new_filter_block(const struct logger *logger);
 int flatten_block_list(struct filter_block *head, struct sock_filter *filter,
 		       size_t index, size_t cap);
 void free_block_list(struct filter_block *head);

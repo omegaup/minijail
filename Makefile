@@ -88,7 +88,8 @@ CXX_BINARY(system_unittest): LDLIBS += $(GTEST_MAIN)
 ifeq ($(USE_SYSTEM_GTEST),no)
 CXX_BINARY(system_unittest): $(GTEST_MAIN)
 endif
-CXX_BINARY(system_unittest): system_unittest.o system.o
+CXX_BINARY(system_unittest): system_unittest.o system.o util.o \
+		libconstants.gen.o libsyscalls.gen.o
 clean: CLEAN(system_unittest)
 
 
