@@ -357,6 +357,20 @@ int API minijail_change_group(struct minijail *j, const char *group)
 	return 0;
 }
 
+int API minijail_get_uid(struct minijail *j)
+{
+	if (!j->flags.uid)
+		return -EINVAL;
+	return j->uid;
+}
+
+int API minijail_get_gid(struct minijail *j)
+{
+	if (!j->flags.gid)
+		return -EINVAL;
+	return j->gid;
+}
+
 void API minijail_use_seccomp(struct minijail *j)
 {
 	j->flags.seccomp = 1;
@@ -1478,10 +1492,18 @@ static void write_ugid_maps_or_die(const struct minijail *j)
 
 static void enter_user_namespace(const struct minijail *j)
 {
-	if (j->uidmap && setresuid(0, 0, 0))
-		pdie(&j->logger, "user_namespaces: setresuid(0, 0, 0) failed");
-	if (j->gidmap && setresgid(0, 0, 0))
-		pdie(&j->logger, "user_namespaces: setresgid(0, 0, 0) failed");
+	int uid = j->flags.uid ? j->uid : 0;
+	int gid = j->flags.gid ? j->gid : 0;
+	if (j->gidmap && setresgid(gid, gid, gid)) {
+		pdie(&j->logger,
+		     "user_namespaces: setresgid(%d, %d, %d) failed", gid, gid,
+		     gid);
+	}
+	if (j->uidmap && setresuid(uid, uid, uid)) {
+		pdie(&j->logger,
+		     "user_namespaces: setresuid(%d, %d, %d) failed", uid, uid,
+		     uid);
+	}
 }
 
 static void parent_setup_complete(int *pipe_fds)
@@ -1521,7 +1543,7 @@ static void drop_ugid(const struct minijail *j)
 	} else if (j->flags.set_suppl_gids) {
 		if (setgroups(j->suppl_gid_count, j->suppl_gid_list))
 			pdie(&j->logger, "setgroups(suppl_gids) failed");
-	} else if (!j->flags.keep_suppl_gids) {
+	} else if (!j->flags.keep_suppl_gids && !j->flags.disable_setgroups) {
 		/*
 		 * Only attempt to clear supplementary groups if we are changing
 		 * users or groups.

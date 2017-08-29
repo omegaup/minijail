@@ -93,6 +93,20 @@ void minijail_skip_setting_securebits(struct minijail *j,
 				      uint64_t securebits_skip_mask);
 
 /*
+ * Returns the uid set by either minijail_change_uid() or
+ * minijail_change_user(). If none of those functions were called, this returns
+ * -EINVAL.
+ */
+int minijail_get_uid(struct minijail *j);
+
+/*
+ * Returns the gid set by either minijail_change_gid() or
+ * minijail_change_user(). If none of those functions were called, this returns
+ * -EINVAL.
+ */
+int minijail_get_gid(struct minijail *j);
+
+/*
  * This option is *dangerous* as it negates most of the functionality of
  * minijail_namespace_vfs(). You very likely don't need this.
  */
