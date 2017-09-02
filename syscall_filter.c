@@ -173,7 +173,7 @@ int compile_atom(struct filter_block *head, char *atom,
 		 struct bpf_labels *labels, int nr, int grp_idx)
 {
 	/* Splits the atom. */
-	char *atom_ptr;
+	char *atom_ptr = NULL;
 	char *argidx_str = strtok_r(atom, " ", &atom_ptr);
 	if (argidx_str == NULL) {
 		warn("empty atom");
@@ -372,10 +372,10 @@ struct filter_block *compile_policy_line(int nr, const char *policy_line,
 	 * by '&&' into atoms.
 	 */
 	char *arg_filter_str = arg_filter;
-	char *group;
+	char *group = NULL;
 	while ((group = tokenize(&arg_filter_str, "||")) != NULL) {
 		char *group_str = group;
-		char *comp;
+		char *comp = NULL;
 		while ((comp = tokenize(&group_str, "&&")) != NULL) {
 			/* Compiles each atom into a BPF block. */
 			if (compile_atom(head, comp, labels, nr, grp_idx) < 0) {
