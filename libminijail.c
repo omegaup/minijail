@@ -84,8 +84,8 @@
 
 struct minijail_rlimit {
 	int type;
-	uint32_t cur;
-	uint32_t max;
+	rlim_t cur;
+	rlim_t max;
 };
 
 struct mountpoint {
@@ -662,8 +662,8 @@ int API minijail_add_to_cgroup(struct minijail *j, const char *path)
 	return 0;
 }
 
-int API minijail_rlimit(struct minijail *j, int type, uint32_t cur,
-			uint32_t max)
+int API minijail_rlimit(struct minijail *j, int type, uintmax_t cur,
+			uintmax_t max)
 {
 	size_t i;
 
@@ -676,8 +676,10 @@ int API minijail_rlimit(struct minijail *j, int type, uint32_t cur,
 	}
 
 	j->rlimits[j->rlimit_count].type = type;
-	j->rlimits[j->rlimit_count].cur = cur;
-	j->rlimits[j->rlimit_count].max = max;
+	j->rlimits[j->rlimit_count].cur =
+	    cur > RLIM_INFINITY ? RLIM_INFINITY : (rlim_t)cur;
+	j->rlimits[j->rlimit_count].max =
+	    max > RLIM_INFINITY ? RLIM_INFINITY : (rlim_t)max;
 	j->rlimit_count++;
 	return 0;
 }
