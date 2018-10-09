@@ -352,7 +352,7 @@ def main(args):
             root.copyfromhost(filename)
 
     with urllib.request.urlopen(
-            'https://raw.githubusercontent.com/omegaup/karel.js/master/libkarel/libkarel.py') as f:
+            'https://raw.githubusercontent.com/omegaup/libkarel/master/libkarel.py') as f:
         root.write('/usr/lib/python2.7/libkarel.py', f.read())
 
   with Chroot(os.path.join(args.target, 'root-ruby'), RUBY_ROOT, link=args.link) as root:
